@@ -27,8 +27,8 @@ let data = {
     block: 0
 };
 
-function constractError(log) {
-    const errStr = {
+function contractError(log) {
+    const errors = {
         1: 'AlreadyDiscovered', 2: 'HomesteadNotFound', 3: 'PailAmountTooLow', 4: 'AlreadyHasPail',
         5: 'FarmIsPaused', 6: 'HashIsInvalid', 7: 'BlockNotFound', 8: 'HarvestNotReady',
         9: 'KaleNotFound', 10: 'PailNotFound', 11: 'ZeroCountTooLow', 12: 'AssetAdminMismatch',
@@ -36,7 +36,7 @@ function constractError(log) {
     };
     const match = log.toString().match(/Error\(Contract, #(\d+)\)/);
     if (match) {
-        return errStr[parseInt(match[1], 10)];
+        return errors[parseInt(match[1], 10)];
     }
     return null;
 }
@@ -47,13 +47,12 @@ async function harvestAll(block) {
             await execute('harvest', { farmer: key, block });
             console.log(`Harvest successful for ${key} on block ${block}`);
         } catch(err) {
-            const error = constractError(err);
-            console.error(`Harvest failed for ${key} on block ${block} -> ${error}`);
+            console.error(`Harvest failed for ${key} on block ${block} -> ${contractError(err)}`);
         }
     }
 }
 
-async function getData() {
+async function getInstanceContractData() {
     const result = {};
     try {
         const { val } = await rpc.getContractData(
@@ -80,34 +79,50 @@ async function getData() {
     return result;
 }
 
+async function getTempContractData(key) {
+    try {
+        const data = xdr.LedgerKey.contractData(
+            new xdr.LedgerKeyContractData({
+                contract: new Address(CONTRACT_ID).toScAddress(),
+                key,
+                durability: xdr.ContractDataDurability.temporary(),
+            })
+        );
+        const blockData = await rpc.getLedgerEntries(data);
+        const entry = blockData.entries?.[0];
+        if (entry) {
+            return scValToNative(entry.val?._value.val());
+        }
+    } catch (error) {
+        console.error("Error:", error);
+    }
+}
+
+async function checkPail(address, block) {
+    return !!(await getTempContractData(xdr.ScVal.scvVec([xdr.ScVal.scvSymbol("Pail"),
+        new Address(address).toScVal(),
+        nativeToScVal(Number(block), { type: "u32" })])));
+}
+
 async function fetchContent(delay) {
     while (true) {
-        const result = await getData();
+        const result = await getInstanceContractData();
         if (!result?.block || !result?.hash) {
             await new Promise(resolve => setTimeout(resolve, delay));
             continue;
         }
-        const changed = result.block !== data.block || result.hash !== data.hash;
+        const changed = result.block !== data.block /* || result.hash !== data.hash */;
         if (changed) {
             data = result;
-            const coreDataLedgerKey = xdr.LedgerKey.contractData(
-                new xdr.LedgerKeyContractData({
-                    contract: new Address(CONTRACT_ID).toScAddress(),
-                    key: xdr.ScVal.scvVec([xdr.ScVal.scvSymbol("Block"),
-                        nativeToScVal(Number(data.block - 1), { type: "u32" })]),
-                    durability: xdr.ContractDataDurability.temporary(),
-                })
-            );
             delete data.details;
-            const blockData = await rpc.getLedgerEntries(coreDataLedgerKey);
-            const entry = blockData.entries?.[0];
-            if (entry) {
-                const blockData = scValToNative(entry.val?._value.val());
+            const tempData = await getTempContractData(xdr.ScVal.scvVec([xdr.ScVal.scvSymbol("Block"),
+                nativeToScVal(Number(data.block - 1), { type: "u32" })]));
+            if (tempData) {
                 data.details = {
-                    pow_zeros: Number(blockData.pow_zeros),
-                    reclaimed: Number(blockData.reclaimed),
-                    staked: Number(blockData.staked),
-                    timestamp: BigInt(blockData.timestamp)
+                    pow_zeros: Number(tempData.pow_zeros),
+                    reclaimed: Number(tempData.reclaimed),
+                    staked: Number(tempData.staked),
+                    timestamp: BigInt(tempData.timestamp)
                 };
             }
             await harvestAll(data.block - 1);
@@ -117,7 +132,7 @@ async function fetchContent(delay) {
 
         if (BigInt(Math.floor(Date.now() / 1000)) - (data.details?.timestamp || 0) > 60 * 5) {
             for (const publicKey in signers) {
-                delete signers[publicKey].plant;
+                delete signers[publicKey].pail;
             }
         }
         await new Promise(resolve => setTimeout(resolve, delay));
@@ -187,14 +202,13 @@ app.get('/plant', async(req, res) => {
     const { farmer, amount } = req.query;
     try {
         const signer = signers[farmer];
-        if (signer && (!signer.plant || signer.plant !== data.block)) {
-            signer.plant = data.block;
-            const result = await execute('plant', { farmer, amount });
-            console.log(result)
+        if (signer && signer.pail !== data.block) {
+            signer.pail = data.block;
+            const result = await execute('plant', { farmer, amount })
+            console.log(`Plant successful for ${farmer} on block ${data.block} with amount ${amount}`);
             res.json({ result });
         }
     } catch (error) {
-        console.error(error.message);
         res.status(500).send(error.message);
     }
 });
@@ -203,7 +217,7 @@ app.get('/work', async(req, res) => {
     const { farmer, hash, nonce } = req.query;
     try {
         const result = await execute('work', { farmer, hash, nonce });
-        console.log(result)
+        console.log(`Work successful for ${farmer} on block ${data.block} with hash ${hash} and nonce ${nonce}`);
         res.json({ result }); 
     } catch (error) {
         console.error(error.message);
@@ -215,6 +229,7 @@ app.get('/harvest', async(req, res) => {
     const { farmer, block } = req.query;
     try {
         const result = await execute('harvest', { farmer, block });
+        console.log(`Harvest successful for ${farmer} on block ${data.block}`);
         res.json({ result }); 
     } catch (error) {
         console.error(error.message);
