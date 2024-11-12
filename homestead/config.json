@@ -1,0 +1,27 @@
+
+
+{
+    "farmers": [
+        {
+            "secret": "SECRET...KEY",
+            "stake": 0,
+            "difficulty": 6
+        }
+    ],
+    "miner": {
+        "executable": "../miner",
+        "difficulty": 6,
+        "nonce": 0,
+        "gpu": false,
+        "maxThreads": 4,
+        "batchSize": 10000000,
+        "verbose": true,
+        "device": 0
+    },
+    "stellar": {
+        "rpc": "your-stellar-rpc-url",
+        "contract": "CDL74RF5BLYR2YBLCCI7F5FB6TPSCLKEJUBSD2RSVWZ4YHF3VMFAIGWA",
+        "assetIssuer": "GBDVX4VELCDSQ54KQJYTNHXAHFLBCA77ZY2USQBM4CSHTTV7DME7KALE",
+        "assetCode": "KALE"
+    }
+}

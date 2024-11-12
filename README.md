@@ -89,96 +89,81 @@ Should output:
 }
 ```
 
-IMPORTANT: When using `--gpu`, the `--max-threads` parameter specifies the number of threads per block (e.g. 512, 768), and --batch-size should be adjusted based on your GPU capabilities.
+> ⚠️ IMPORTANT: When using `--gpu`, the `--max-threads` parameter specifies the number of threads per block (e.g. 512, 768), and --batch-size should be adjusted based on your GPU capabilities.
 
 ## Getting Started
 
-The `sample-scripts` folder contains scripts from my current setup, shared here to help you set up your environment or serve as inspiration. They automate the entire KALE farming process including `planting`, `working` and `harvesting`.
+The `homestead` folder contains a Node.js application designed to simplify the KALE farming cycle with the **C++ CPU/GPU miner**. It automates `monitoring` new blocks, `planting`, `working`, and `harvesting`, and can manage multiple farmer accounts to help you maximize your CPU/GPU utilization.
 
-| Script              | Description                                                                      |
-|---------------------|----------------------------------------------------------------------------------|
-| **homestead.js**       | Node.js server monitoring blockchain updates, and providing endpoints to `plant` and submit `work` with automated `harvest`. |
-| **poll.sh**         | Bash script to manage miner instances and poll the homestead server for work.               |
-| **mine.sh**         | Bash script running the miner instance.           |
+### Spin Up the Homestead Server
 
+Open `homestead/config.json` to configure your server settings.
 
-### Spin up the Homestead server
+> 💡PRO TIP: Add as many farmers as you like! Their tasks will run one after the other, and you can tweak individual difficulty to maximize CPU/GPU occupancy during the 5-minute block window.
 
-Configure your miners secret keys in `homestead.js`.
-You can specify as many as you want, only miners in this list can successfully call the homestead endpoints.
+> 💡PRO TIP: Keep only a minimal amount of XLM in your farmer accounts. These projects are experimental, network updates (e.g., reduced block time) could quickly drain your balances
 
-```js
-const secrets  = [
-    'SECRET...KEY1'
-];
+```json
+{
+    // You can add as many farmers as you want in this array. Each farmer's work will be scheduled sequentially.
+    // You can adjust individual difficulty and stake settings to optimize CPU/GPU usage
+    // for the 5-minute mining window.
+    "farmers": [
+        {
+            // Secret key for the farmer account.
+            // The harvesting process will automatically add a KALE trustline if not set.
+            "secret": "SECRET...KEY",
+            // Specify the stake, starting with 0 for new accounts.
+            "stake": 0,
+            // Optional. Adjust based on your CPU/GPU power.
+            "difficulty": 6
+        }
+    ],
+    // Tune these settings according to your system’s performance.
+    "miner": {
+        "executable": "../miner",
+        // Default difficulty for all farmers, unless overridden.
+        "difficulty": 6,
+        // Initial nonce.
+        "nonce": 0,
+        // Enable GPU mining (NVIDIA CUDA).
+        "gpu": false,
+        // For CPU mining, `max_threads` should be set within the range of your available CPU cores.
+        // For GPU mining, `max_threads` refers to the number of threads per block.
+        "maxThreads": 4,
+        // Number of hashes processed in a single batch.
+        "batchSize": 10000000,
+        // For GPU mining, specify the device ID (default 0).
+        "device": 0,
+        // Enable real-time miner output.
+        "verbose": true
+    },
+    "stellar": {
+        // Stellar RPC URL, or use the environment variable RPC_URL.
+        "rpc": "your-stellar-rpc-url",
+        // KALE contract ID.
+        "contract": "CDL74RF5BLYR2YBLCCI7F5FB6TPSCLKEJUBSD2RSVWZ4YHF3VMFAIGWA",
+        // KALE asset issuer.
+        "assetIssuer": "GBDVX4VELCDSQ54KQJYTNHXAHFLBCA77ZY2USQBM4CSHTTV7DME7KALE",
+        // KALE asset code.
+        "assetCode": "KALE"
+    }
+}
 ```
 
-Then run the following to set up and start the server:
+Then run the following commands to start the server:
 
 ```bash
-cd sample-scripts
+cd homestead
 npm install
 PORT=3001 RPC_URL="https://your-rpc-url" npm start
 ```
 
-### Configure the scripts
+### Homestead Server API (Advanced Users)
 
-You can configure the following variables in `poll.sh` to customize the setup for your environment:
+The Homestead server provides several API endpoints to allow manual interactions with the KALE farming process, including `/plant`, `/work`, `/harvest`, `/data` and `/balances`. Feel free to use these endpoints to experiment with individual steps in the farming cycle.
 
-```bash
-# Poller url.
-endpoint="http://localhost:3001"
-
-# Stake amount (new miners should start with 0).
-stake_amount=0
-
-# Difficulty level (adjust based on your CPU capabilities).
-difficulty=6
-
-# Specify valid miner Stellar address(es).
-miners=(
-    "GBQHTQ7NTS...6OWXUJWEKALE"
-)
-```
-
-Edit the following variables in `mine.sh` to customize the setup for your environment:
-
-```bash
-# Poller url.
-endpoint="http://localhost:3001"
-
-# Starting nonce.
-nonce=0
-
-# GPU mode.
-gpu=false
-
-# Max threads or threads per block (GPU)
-max_threads=4
-
-# Batch size.
-batch_size=10000000
-
-# Verbose.
-verbose=true
-```
-
-#### Some notes on `max_threads` and `batch_size`
-
-- For CPU mining, `max_threads` should be set within the range of your available CPU cores.
-- For GPU mining, `max_threads` refers to the number of threads per block. It should be a multiple of the warp size (32) so using 256, 512, 768 is generally recommended.
-- The `batch_size` parameter determines the number of hashes processed in a single batch. Should be set based on your CPU or GPU performance, balance to minimize overhead and maximizing throughput.
-
-### Start mining
-
-To begin mining, run the poller script with:
-
-```bash
-cd sample-scripts
-./poll.sh
-```
-
-If you have multiple GPUs, you can run each of them in seperate terminals using `./poll.sh {n}`
+Open `homestead/routes.js` for more details.
 
 ## Disclaimer
 
