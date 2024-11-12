@@ -103,7 +103,7 @@ Open `homestead/config.json` to configure your server settings.
 
 > 💡PRO TIP: Keep only a minimal amount of XLM in your farmer accounts. These projects are experimental, network updates (e.g., reduced block time) could quickly drain your balances
 
-```json
+```js
 {
     // You can add as many farmers as you want in this array. Each farmer's work will be scheduled sequentially.
     // You can adjust individual difficulty and stake settings to optimize CPU/GPU usage
