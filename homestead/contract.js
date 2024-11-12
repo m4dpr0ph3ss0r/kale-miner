@@ -6,8 +6,9 @@
 const { SorobanRpc, Horizon, xdr, Address, Operation, Asset, Contract, Networks, TransactionBuilder, StrKey, Keypair, nativeToScVal, scValToNative } = require('@stellar/stellar-sdk');
 const config = require(process.env.CONFIG || './config.json');
 const rpc = new SorobanRpc.Server(process.env.RPC_URL || config.stellar?.rpc);
-const horizon = new Horizon.Server('https://horizon.stellar.org', { allowHttp: true });
+const horizon = new Horizon.Server(config.stellar?.horizon || 'https://horizon.stellar.org', { allowHttp: true });
 const contractId = config.stellar?.contract;
+const fees = config.stellar?.fees || 10000000;
 
 const signers = config.farmers.reduce((acc, farmer) => {
     const keypair = Keypair.fromSecret(farmer.secret);
@@ -38,12 +39,16 @@ const contractErrors = Object.freeze({
     13: 'FarmIsNotPaused'
 });
 
-function getError(log) {
-    const match = log.toString().match(/Error\(Contract, #(\d+)\)/);
+function getError(error) {
+    function stringify(value) {
+        return typeof value === 'object' && value !== null
+            ? JSON.stringify(value) : (value || '').toString();
+    }
+    const match = error.toString().match(/Error\(Contract, #(\d+)\)/);
     if (match) {
         return contractErrors[parseInt(match[1], 10)];
     }
-    return null;
+    return stringify(error) || '';
 }
 
 async function getInstanceData() {
@@ -68,7 +73,7 @@ async function getInstanceData() {
                 }
             });
     } catch (error) {
-        console.error("Error:", error);
+        console.error(error);
     }   
     return result;
 }
@@ -88,7 +93,7 @@ async function getTemporaryData(key) {
             return scValToNative(entry.val?._value.val());
         }
     } catch (error) {
-        console.error("Error:", error);
+        console.error(error);
     }
 }
 
@@ -107,7 +112,7 @@ async function setupAsset(farmer) {
         if (!account.balances.some(balance => 
             balance.asset_code === code && balance.asset_issuer === issuer
         )) {
-            const transaction = new TransactionBuilder(account, { fee: '10000000', networkPassphrase: Networks.PUBLIC })
+            const transaction = new TransactionBuilder(account, { fee: fees.toString(), networkPassphrase: config.stellar?.networkPassphrase || Networks.PUBLIC })
                 .addOperation(Operation.changeTrust({
                     asset: new Asset(code, issuer)
                 }))
@@ -149,13 +154,48 @@ async function invoke(method, data) {
     }
 
     const account = await rpc.getAccount(data.farmer);
-    let transaction = new TransactionBuilder(account, { fee: '10000000', networkPassphrase: Networks.PUBLIC })
+    let transaction = new TransactionBuilder(account, { fee: fees.toString(), networkPassphrase: config.stellar?.networkPassphrase || Networks.PUBLIC })
         .addOperation(args)
         .setTimeout(300)
         .build();
     transaction = await rpc.prepareTransaction(transaction);
     transaction.sign(Keypair.fromSecret(signers[data.farmer].secret));
-    return await rpc.sendTransaction(transaction);
+
+    if (LaunchTube.isValid()) {
+        return await LaunchTube.send(transaction.toEnvelope().toXDR('base64'), fees);
+    } else {
+        return await rpc.sendTransaction(transaction);
+    }
 }
 
-module.exports = { getInstanceData, getTemporaryData, getPail, getError, invoke, rpc, contractId, contractErrors, signers, blockData, balances };
+class LaunchTube {
+    static isValid() {
+        const jwt = /^[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+$/;
+        return config.stellar?.launchtube?.url
+            && jwt.test(config.stellar?.launchtube?.token)
+            && config.stellar.launchtube.token.length > 30;
+    }
+
+    static async send(xdr, fee) {
+        const data = new FormData();
+        data.append('xdr', xdr);
+        data.append('fee', fee.toString());
+        data.append('sim', false);
+        const res = await fetch(config.stellar.launchtube.url, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${config.stellar.launchtube.token}`,
+            },
+            body: data
+        });
+        if (res.ok) {
+            return await res.json();
+        } else {
+            const errorText = await res.text();
+            console.error(`Launchtube: Error ${res.status}:`, errorText);
+            throw new Error(`Launchtube: ${errorText}`);
+        }
+    }
+}
+
+module.exports = { getInstanceData, getTemporaryData, getPail, getError, invoke, LaunchTube, rpc, contractId, contractErrors, signers, blockData, balances };
