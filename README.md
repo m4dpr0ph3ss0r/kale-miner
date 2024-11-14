@@ -106,8 +106,7 @@ Open `homestead/config.json` to configure your server settings.
 ```js
 {
     // You can add as many farmers as you want in this array. Each farmer's work will be scheduled sequentially.
-    // You can adjust individual difficulty and stake settings to optimize CPU/GPU usage
-    // for the 5-minute mining window.
+    // Adjust individual difficulty and stake settings directly, or use strategy.js to implement a dynamic strategy.
     "farmers": [
         {
             // Secret key for the farmer account.
@@ -116,7 +115,10 @@ Open `homestead/config.json` to configure your server settings.
             // Specify the stake, starting with 0 for new accounts.
             "stake": 0,
             // Optional. Adjust based on your CPU/GPU power.
-            "difficulty": 6
+            "difficulty": 6,
+            // Optional: Defines the minimum time (in seconds) before work is submitted
+            // to the contract (default is 0 for immediate submission).
+            "minWorkTime": 0
         }
     ],
     // Tune these settings according to your system’s performance.
@@ -147,6 +149,16 @@ Open `homestead/config.json` to configure your server settings.
         "assetIssuer": "GBDVX4VELCDSQ54KQJYTNHXAHFLBCA77ZY2USQBM4CSHTTV7DME7KALE",
         // KALE asset code.
         "assetCode": "KALE"
+        // Optional. Fee settings for transactions (default 10000000).
+        "fees": 10000000,
+        // Optional. Output transaction response (default false).
+        "debug": false,
+        // Optional. If both a valid token and URL are provided,
+        // Launchtube credits will be used to submit contract invocation transactions.
+        "launchtube": {
+            "url": "https://launchtube.xyz",
+            "token": "eyJ0eX...uQQa5WlP08"
+        }
     }
 }
 ```
@@ -158,6 +170,39 @@ cd homestead
 npm install
 PORT=3001 RPC_URL="https://your-rpc-url" npm start
 ```
+
+### Dynamic Farming Strategy (Advanced Users)
+
+Farming KALE most efficiently requires dynamically adjusting your farmers parameters. The [`strategy.js`](https://github.com/FredericRezeau/kale-miner/blob/main/homestead/strategy.js) module enables you to define the `stake`, `difficulty`, and `minWorkTime` for each farmer based on real-time conditions.
+
+Below is an example of a dynamic strategy that implements the following:
+
+- `plant` stakes 10% of the farmer KALE balance (up to a maximum of 10 KALE).
+- Sets difficulty to the previous block difficulty + 1 (capped at 9 for safety).
+- Ensures a minimum `work` time of 3 minutes before submission.
+
+```js
+const config = require(process.env.CONFIG || './config.json');
+const { horizon } = require('./contract');
+
+module.exports = {
+    stake: async(publicKey, _blockData) => {
+        const asset = (await horizon.loadAccount(publicKey)).balances.find(
+            balance => balance.asset_code === config.stellar.assetCode && balance.asset_issuer === config.stellar.assetIssuer);
+        return Math.min(Math.floor(Number(asset?.balance || 0) * 1000000), 100000000);
+    },
+
+    difficulty: async(_publicKey, blockData) => {
+        return Math.min(Buffer.from(blockData.hash, 'base64').reduce(
+            (zeros, byte) => zeros + (byte === 0 ? 2 : (byte >> 4) === 0 ? 1 : 0), 0) + 1, 9);
+    },
+
+    minWorkTime: async(_publicKey, _blockData) => {
+        return 180;
+    }
+};
+```
+
 
 ### Homestead Server API (Advanced Users)
 
