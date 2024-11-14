@@ -5,7 +5,8 @@
         {
             "secret": "SECRET...KEY",
             "stake": 0,
-            "difficulty": 6
+            "difficulty": 6,
+            "minWorkTime": 0
         }
     ],
     "miner": {
@@ -24,6 +25,7 @@
         "assetIssuer": "GBDVX4VELCDSQ54KQJYTNHXAHFLBCA77ZY2USQBM4CSHTTV7DME7KALE",
         "assetCode": "KALE",
         "fees": 10000000,
+        "debug": false,
         "launchtube": {
             "url": "https://launchtube.xyz",
             "token": "eyJ0eX...uQQa5WlP08"

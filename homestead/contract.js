@@ -12,7 +12,13 @@ const fees = config.stellar?.fees || 10000000;
 
 const signers = config.farmers.reduce((acc, farmer) => {
     const keypair = Keypair.fromSecret(farmer.secret);
-    acc[keypair.publicKey()] = { secret: farmer.secret, stake: farmer.stake, difficulty: farmer.difficulty };
+    const publicKey = keypair.publicKey();
+    acc[publicKey] = {
+        secret: farmer.secret,
+        stake: farmer.stake || 0,
+        difficulty: farmer.difficulty || 6,
+        minWorkTime: farmer.minWorkTime || 0
+    };
     return acc;
 }, {});
 
@@ -42,7 +48,7 @@ const contractErrors = Object.freeze({
 function getError(error) {
     function stringify(value) {
         return typeof value === 'object' && value !== null
-            ? JSON.stringify(value) : (value || '').toString();
+            ? JSON.stringify(value) : (value || '');
     }
     const match = error.toString().match(/Error\(Contract, #(\d+)\)/);
     if (match) {
@@ -119,7 +125,10 @@ async function setupAsset(farmer) {
                 .setTimeout(300)
                 .build();
             transaction.sign(Keypair.fromSecret(signers[farmer].secret));
-            await rpc.sendTransaction(transaction);
+            const response = await getResponse(await rpc.sendTransaction(transaction));
+            if (response.status !== 'SUCCESS') {
+                throw new Error(`tx Failed: ${response.hash}`);
+            }
             console.log(`Trustline set for ${farmer} to ${code}:${issuer}`);
         }
         const native = account.balances.find(balance => balance.asset_type === 'native')?.balance || '0';
@@ -127,6 +136,20 @@ async function setupAsset(farmer) {
         balances[farmer] = { XLM: native, [code]: asset?.balance || '0' };
         console.log(`Farmer ${farmer} balances: ${asset?.balance || 0} ${code} | ${native} XLM`);
     }
+}
+
+async function getResponse(response, launchTube) {
+    const txId = response.hash;
+    if (!launchTube) {
+        while (response.status === "PENDING" || response.status === "NOT_FOUND") {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            response = await rpc.getTransaction(txId);
+        }
+    }
+    if (config.stellar?.debug) {
+        console.log(response);
+    }
+    return response;
 }
 
 async function invoke(method, data) {
@@ -162,9 +185,9 @@ async function invoke(method, data) {
     transaction.sign(Keypair.fromSecret(signers[data.farmer].secret));
 
     if (LaunchTube.isValid()) {
-        return await LaunchTube.send(transaction.toEnvelope().toXDR('base64'), fees);
+        return await getResponse(await LaunchTube.send(transaction.toEnvelope().toXDR('base64'), fees), true);
     } else {
-        return await rpc.sendTransaction(transaction);
+        return await getResponse(await rpc.sendTransaction(transaction));
     }
 }
 
@@ -198,4 +221,4 @@ class LaunchTube {
     }
 }
 
-module.exports = { getInstanceData, getTemporaryData, getPail, getError, invoke, LaunchTube, rpc, contractId, contractErrors, signers, blockData, balances };
+module.exports = { getInstanceData, getTemporaryData, getPail, getError, invoke, LaunchTube, rpc, horizon, contractId, contractErrors, signers, blockData, balances };

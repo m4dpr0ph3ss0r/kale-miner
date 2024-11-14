@@ -4,14 +4,16 @@
  */
 
 const express = require('express');
-const { xdr, nativeToScVal } = require('@stellar/stellar-sdk');
+const { xdr, nativeToScVal, scValToNative } = require('@stellar/stellar-sdk');
 const { spawn } = require('child_process');
 const routes = require('./routes');
 const config = require(process.env.CONFIG || './config.json');
-const { signers, blockData, invoke, getError, getInstanceData, getTemporaryData, getPail } = require('./contract');
+const strategy = require('./strategy.js');
+const { signers, blockData, invoke, getError, getInstanceData, getTemporaryData, getPail, LaunchTube } = require('./contract');
 const app = express();
 const PORT = process.env.PORT || 3002;
 const pollInterval = 5 * 1000;
+let elapsedBlock = 0;
 
 const FarmerStatus = Object.freeze({
     PLANTING: 1,
@@ -19,22 +21,27 @@ const FarmerStatus = Object.freeze({
     IDLE: 4
 });
 
-async function plant(key, block) {
+const deepCopy = obj => JSON.parse(JSON.stringify(obj,
+    (_key, value) => typeof value === 'bigint' ? value.toString() : value));
+
+async function plant(key, blockData) {
     try {
         if (signers[key].status !== FarmerStatus.PLANTING) {
             return;
         }
-        const amount = signers[key].stake;
-        await invoke('plant', { farmer: key, amount });
-        console.log(`Farmer ${key} planted ${block} with ${Number(amount) / 10000000} KALE`);
-        signers[key].status = FarmerStatus.WORKING;
-        logStatus(key);
-        await new Promise(resolve => setTimeout(resolve, pollInterval));
-    } catch(err) {
-        const error = getError(err)
-        if (error !== 'PailNotFound' && error !== 'AlreadyHasPail') {
-            console.error(`Farmer ${key} could not plant ${block}: ${error}`);
+        const status = await getPail(key, blockData.block);
+        if (!status?.[0]) {
+            const amount = (await strategy.stake(key, deepCopy(blockData))) || signers[key].stake || 0;
+            const response = await invoke('plant', { farmer: key, amount });
+            if (response.status !== 'SUCCESS') {
+                throw new Error(`tx Failed: ${response.hash}`);
+            }
+            console.log(`Farmer ${key} planted ${blockData.block} with ${Number(amount) / 10000000} KALE`);
         }
+    } catch(err) {
+        const error = getError(err);
+        console.error(`Farmer ${key} could not plant ${blockData.block}: ${error}`);
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
     }
 }
 
@@ -43,42 +50,68 @@ async function harvest(key, block) {
         return;
     }
     signers[key].harvested = true;
-    try {
-        await invoke('harvest', { farmer: key, block });
-        console.log(`Farmer ${key} harvested block ${block}`);
-    } catch(err) {
-        const error = getError(err);
-        if (error !== 'PailNotFound') {
+    const status = await getPail(key, block);
+    if (!!status?.[1]) {
+        try {
+            const response = await invoke('harvest', { farmer: key, block });
+            if (response.status !== 'SUCCESS') {
+                throw new Error(`tx Failed: ${response.hash}`);
+            }
+            const txMeta = LaunchTube.isValid()
+                ? xdr.TransactionMeta.fromXDR(response.resultMetaXdr, "base64")
+                : xdr.TransactionMeta.fromXDR(response.resultMetaXdr.toXDR().toString("base64"), "base64");
+            const returnValue = txMeta.v3().sorobanMeta().returnValue(); 
+            const value = Number(scValToNative(returnValue) || 0);
+            console.log(`Farmer ${key} harvested block ${block} for ${value / 10000000} KALE`);
+        } catch(err) {
+            const error = getError(err);
             console.error(`Farmer ${key} could not harvest block ${block}: ${error}`);
+            signers[key].harvested = false;
+            await new Promise(resolve => setTimeout(resolve, pollInterval));
         }
     }
 }
 
-async function work(key, block, hash) {
-    const {
-        difficulty,
-        nonce,
-        gpu,
-        maxThreads,
-        batchSize,
-        verbose,
-        device,
-        executable
-    } = config.miner;
-
+async function work(mining, key, blockData) {
     if (signers[key].status !== FarmerStatus.WORKING) {
         return;
     }
-
-    try {
-        await mine(executable, block, hash, nonce, signers[key].difficulty || difficulty, key, maxThreads, batchSize, device, gpu, verbose);
-        await new Promise(resolve => setTimeout(resolve, pollInterval));
-    } catch (error) {
-        const errorCode = getError(error);
-        console.error(`Farmer ${key} couldn not submit work for ${block}: ${errorCode}`);
-        if (errorCode === 'PailNotFound') {
-            signers[key].status = FarmerStatus.PLANTING;
-            logStatus(key);
+    if (mining && !signers[key].work) {
+        const {
+            difficulty,
+            nonce,
+            gpu,
+            maxThreads,
+            batchSize,
+            verbose,
+            device,
+            executable
+        } = config.miner;
+        try {
+            const { work } = await mine(executable, blockData.block, blockData.hash, nonce,
+                (await strategy.difficulty(key, deepCopy(blockData))) || signers[key].difficulty || difficulty || 6,
+                key, maxThreads, batchSize, device, gpu, verbose);
+            signers[key].work = work;
+            console.log(`Farmer ${key} worked [${work.hash}, ${work.nonce}] for ${blockData.block}`);
+            return true;
+        } catch (error) {
+            delete signers[key].work;
+            const errorCode = getError(error);
+            console.error(`Farmer ${key} failed to work for ${blockData.block}: ${errorCode}`);
+            await new Promise(resolve => setTimeout(resolve, pollInterval));
+        }
+    } else if (!mining && signers[key].work) {
+        try {
+            const response = await invoke('work', { farmer: key, hash: signers[key].work.hash, nonce: signers[key].work.nonce });
+            if (response.status !== 'SUCCESS') {
+                throw new Error(`tx Failed: ${response.hash}`);
+            }
+            console.log(`Farmer ${key} submitted work [${signers[key].work.hash}, ${signers[key].work.nonce}] for ${blockData.block}`);
+        } catch(err) {
+            delete signers[key].work;
+            const error = getError(err);
+            console.error(`Farmer ${key} could not submit work for block ${blockData.block}: ${error}`);
+            await new Promise(resolve => setTimeout(resolve, pollInterval));
         }
     }
 }
@@ -116,12 +149,7 @@ async function mine(minerExec, block, hash, nonce, difficulty, key, maxThreads, 
             try {
                 const result = output.match(/{[\s\S]*?}/);
                 if (result) {
-                    const json = JSON.parse(result[0]);
-                    await invoke('work', { farmer: key, hash: json.hash, nonce: json.nonce });
-                    console.log(`Farmer ${key} submitted work [${json.hash}, ${json.nonce}] for ${block}`);
-                    signers[key].status = FarmerStatus.IDLE;
-                    logStatus(key);
-                    resolve();
+                    resolve({ work: JSON.parse(result[0]) });
                 } else {
                     reject(new Error(`No result found`));
                 }
@@ -139,15 +167,15 @@ async function mine(minerExec, block, hash, nonce, difficulty, key, maxThreads, 
 async function runFarm(interval) {
     let count = 0;
     while (true) {
-        count += 1;
         const result = await getInstanceData();
         if (!result?.block || !result?.hash) {
             await new Promise(resolve => setTimeout(resolve, interval));
             continue;
         }
         const changed = result.block !== blockData.block;
-        const elapsed = BigInt(Math.floor(Date.now() / 1000)) - BigInt(blockData.details?.timestamp || 0) > 60 * 5 + 30;
-        if (changed || elapsed) {
+        const elapsedTime = Number(BigInt(Math.floor(Date.now() / 1000)) - BigInt(blockData.details?.timestamp || 0));
+        const hasElapsed = elapsedTime > 60 * 5 + 10;
+        if (changed || hasElapsed) {
             if (changed) {
                 console.log(`New block detected ${result.block}`);
                 blockData.block = result.block;
@@ -166,31 +194,59 @@ async function runFarm(interval) {
                         (_key, value) => typeof value === 'bigint' ? value.toString() : value)}`);
                 }
             }
-            for (const key in signers) {
-                console.log(`Farmer ${key} is READY`);
-                signers[key].status = FarmerStatus.PLANTING;
-                signers[key].harvested = false;
+            if (changed || elapsedBlock !== blockData.block) {
+                if (!changed) {
+                    elapsedBlock = blockData.block;
+                }
+                for (const key in signers) {
+                    console.log(`Farmer ${key} is READY`);
+                    signers[key].status = FarmerStatus.PLANTING;
+                    delete signers[key].harvested;
+                    delete signers[key].work;
+                }
             }
         }
 
+        // Plant ASAP to increase returns.
         for (const key in signers) {
-            await plant(key, blockData.block);
-            if (elapsed) {
+            if (hasElapsed) {
                 break;
             }
-            await updateStatus(key, blockData.block);
-            await work(key, blockData.block, blockData.hash);
+            await plant(key, blockData);
             await updateStatus(key, blockData.block);
         }
-        if (elapsed) {
-            continue;
-        }
+
+        // Harvest previous block.
         for (const key in signers) {
             await harvest(key, blockData.block - 1);
         }
-        if (count % 10 === 0) {
-            console.log(`Current block is ${blockData.block}`);
+
+        // Complete work.
+        for (const key in signers) {
+            if (hasElapsed) {
+                break;
+            }
+
+            const value = (await strategy.minWorkTime(key, deepCopy(blockData))) || signers[key].minWorkTime;
+            const minWorkTime = isNaN(value) ? 0 : value;
+            if (await work(true, key, blockData)) {
+                const timeLeft = minWorkTime - elapsedTime;
+                console.log(`Farmer ${key} submitting work ${timeLeft <= 0 ? 'immediately' : `later (minimum time: ${timeLeft.toFixed(0)} sec)`}`); 
+            }
+            if (minWorkTime <= elapsedTime) {
+                await work(false, key, blockData);
+                await updateStatus(key, blockData.block);
+            }
         }
+
+        if (hasElapsed) {
+            continue;
+        }
+
+        if (count === 0 || count % 7 === 0) {
+            console.log(`Current block is ${blockData.block}, elapsed ${`${Math.floor(elapsedTime / 60)} min ${elapsedTime % 60} sec`}`);
+        }
+        count += 1;
         await new Promise(resolve => setTimeout(resolve, interval));
     }
 }
@@ -199,7 +255,7 @@ async function updateStatus(key, block) {
     try {
         if (signers[key].status !== FarmerStatus.IDLE) {
             const status = await getPail(key, block);
-            if (!!status?.[1] && signers[key].status !== FarmerStatus.IDLE) {
+            if (!!status?.[1]) {
                 signers[key].status = FarmerStatus.IDLE;
                 logStatus(key);
             } else if (!!status?.[0] && signers[key].status !== FarmerStatus.WORKING) {
