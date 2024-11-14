@@ -32,17 +32,18 @@ const balances = {}
 const contractErrors = Object.freeze({
     1: 'AlreadyDiscovered',
     2: 'HomesteadNotFound',
-    3: 'PailAmountTooLow',
+    3: 'PlantAmountTooLow',
     4: 'AlreadyHasPail',
     5: 'FarmIsPaused',
     6: 'HashIsInvalid',
     7: 'BlockNotFound',
     8: 'HarvestNotReady',
-    9: 'KaleNotFound',
+    9: 'WorkNotFound',
     10: 'PailNotFound',
     11: 'ZeroCountTooLow',
     12: 'AssetAdminMismatch',
-    13: 'FarmIsNotPaused'
+    13: 'FarmIsNotPaused',
+    14: 'WorkNotReady'
 });
 
 function getError(error) {
