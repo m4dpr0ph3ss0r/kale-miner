@@ -27,10 +27,10 @@ __constant__ std::uint8_t deviceData[maxDataSize];
         }                                                              \
     } while (0)
 
-__device__ __forceinline__ void updateNonce(__uint128_t val, std::uint8_t* buffer) {
-    #pragma unroll 16
-    for (int i = 0; i < 16; i++) {
-        buffer[15 - i] = static_cast<std::uint8_t>(val >> (i * 8) & 0xFF);
+__device__ __forceinline__ void updateNonce(std::uint64_t val, std::uint8_t* buffer) {
+    #pragma unroll 8
+    for (int i = 0; i < 8; i++) {
+        buffer[7 - i] = static_cast<std::uint8_t>(val >> (i * 8) & 0xFF);
     }
 }
 
@@ -62,18 +62,18 @@ __device__ __forceinline__ void vCopy(std::uint8_t* dest, const std::uint8_t* sr
     }
 }
 
-__global__ void run(int dataSize, __uint128_t startNonce, int nonceOffset, std::uint64_t batchSize, int difficulty,
-                                 int* __restrict__ found, std::uint8_t* __restrict__ output, __uint128_t* __restrict__ validNonce) {
+__global__ void run(int dataSize, std::uint64_t startNonce, int nonceOffset, std::uint64_t batchSize, int difficulty,
+                                 int* __restrict__ found, std::uint8_t* __restrict__ output, std::uint64_t* __restrict__ validNonce) {
     std::uint64_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     std::uint64_t stride = gridDim.x * blockDim.x;
     if (dataSize > maxDataSize || idx >= batchSize || atomicAdd(found, 0) == 1)
         return;
-    __uint128_t nonceEnd = startNonce + batchSize;
+    std::uint64_t nonceEnd = startNonce + batchSize;
     std::uint8_t threadData[maxDataSize];
     vCopy(threadData, deviceData, dataSize);
 
     // Nonce distribution is based on thread id - spaced by stride.
-    for (__uint128_t nonce = startNonce + idx; nonce < nonceEnd; nonce += stride) {
+    for (std::uint64_t nonce = startNonce + idx; nonce < nonceEnd; nonce += stride) {
         updateNonce(nonce, &threadData[nonceOffset]);
         std::uint8_t hash[32];
         keccak256(threadData, dataSize, hash);
@@ -89,13 +89,13 @@ __global__ void run(int dataSize, __uint128_t startNonce, int nonceOffset, std::
     }
 }
 
-extern "C" int executeKernel(int deviceId, std::uint8_t* data, int dataSize, __uint128_t startNonce, int nonceOffset, std::uint64_t batchSize,
-    int difficulty, int threadsPerBlock, std::uint8_t* output, __uint128_t* validNonce, bool showDeviceInfo) {
+extern "C" int executeKernel(int deviceId, std::uint8_t* data, int dataSize, std::uint64_t startNonce, int nonceOffset, std::uint64_t batchSize,
+    int difficulty, int threadsPerBlock, std::uint8_t* output, std::uint64_t* validNonce, bool showDeviceInfo) {
     std::uint8_t* deviceOutput;
     std::size_t outputSize = 32 * sizeof(std::uint8_t);
     int found = 0;
     int* deviceFound;
-    __uint128_t* deviceNonce;
+    std::uint64_t* deviceNonce;
     cudaDeviceProp deviceProp;
     CUDA_CALL(cudaSetDevice(deviceId));
     CUDA_CALL(cudaGetDeviceProperties(&deviceProp, deviceId));
@@ -103,8 +103,8 @@ extern "C" int executeKernel(int deviceId, std::uint8_t* data, int dataSize, __u
     CUDA_CALL(cudaMemcpy(deviceFound, &found, sizeof(int), cudaMemcpyHostToDevice));
     CUDA_CALL(cudaMemcpyToSymbol(deviceData, data, dataSize));
     CUDA_CALL(cudaMalloc((void**)&deviceOutput, outputSize));
-    CUDA_CALL(cudaMalloc((void**)&deviceNonce, sizeof(__uint128_t)));
-    CUDA_CALL(cudaMemset(deviceNonce, 0, sizeof(__uint128_t)));
+    CUDA_CALL(cudaMalloc((void**)&deviceNonce, sizeof(std::uint64_t)));
+    CUDA_CALL(cudaMemset(deviceNonce, 0, sizeof(std::uint64_t)));
 
     if (showDeviceInfo) {
         printf("Device: %s\n", deviceProp.name);
@@ -124,7 +124,7 @@ extern "C" int executeKernel(int deviceId, std::uint8_t* data, int dataSize, __u
     CUDA_CALL(cudaDeviceSynchronize());
     CUDA_CALL(cudaMemcpy(output, deviceOutput, outputSize, cudaMemcpyDeviceToHost));
     CUDA_CALL(cudaMemcpy(&found, deviceFound, sizeof(int), cudaMemcpyDeviceToHost));
-    CUDA_CALL(cudaMemcpy(validNonce, deviceNonce, sizeof(__uint128_t), cudaMemcpyDeviceToHost));
+    CUDA_CALL(cudaMemcpy(validNonce, deviceNonce, sizeof(std::uint64_t), cudaMemcpyDeviceToHost));
     CUDA_CALL(cudaFree(deviceOutput));
     CUDA_CALL(cudaFree(deviceFound));
     CUDA_CALL(cudaFree(deviceNonce));

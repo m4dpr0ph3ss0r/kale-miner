@@ -67,10 +67,10 @@ std::array<uint8_t, 4> i32ToBytes(uint32_t value) {
     return xdr;
 }
 
-std::array<uint8_t, 16> i128ToBytes(__uint128_t value) {
-    std::array<uint8_t, 16> xdr;
-    for (int i = 0; i < 16; ++i) {
-        xdr[15 - i] = static_cast<uint8_t>(value & 0xFF);
+std::array<uint8_t, 8> i64ToBytes(uint64_t value) {
+    std::array<uint8_t, 8> xdr;
+    for (int i = 0; i < 8; ++i) {
+        xdr[7 - i] = static_cast<uint8_t>(value & 0xFF);
         value >>= 8;
     }
     return xdr;
@@ -109,17 +109,6 @@ std::string formatHashRate(double hashRate) {
     std::ostringstream oss;
     oss << std::fixed << std::setprecision(2) << hashRate << " " << units[unit];
     return oss.str();
-}
-
-std::string i128ToString(__uint128_t value) {
-    if (value == 0) return "0";
-    std::ostringstream oss;
-    std::string result;
-    while (value > 0) {
-        result.insert(result.begin(), '0' + (value % 10));
-        value /= 10;
-    }
-    return result;
 }
 
 void printHex(const std::vector<uint8_t>& data) {

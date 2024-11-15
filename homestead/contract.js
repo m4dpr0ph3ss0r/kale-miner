@@ -168,7 +168,7 @@ async function invoke(method, data) {
             break;
         case 'work':
             args = contract.call('work', new Address(data.farmer).toScVal(), xdr.ScVal.scvBytes(Buffer.from(data.hash, 'hex')),
-                nativeToScVal(data.nonce, { type: 'u128' }));
+                nativeToScVal(data.nonce, { type: 'u64' }));
             break;
         case 'harvest':
             await setupAsset(data.farmer);

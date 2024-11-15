@@ -31,8 +31,8 @@
 
 #if GPU == GPU_CUDA
 #include <cuda_runtime.h>
-extern "C" int executeKernel(int deviceId, std::uint8_t* data, int dataSize, __uint128_t startNonce, int nonceOffset,
-    std::uint64_t batchSize, int difficulty, int threadsPerBlock, std::uint8_t* output, __uint128_t* validNonce, bool showDeviceInfo);
+extern "C" int executeKernel(int deviceId, std::uint8_t* data, int dataSize, std::uint64_t startNonce, int nonceOffset,
+    std::uint64_t batchSize, int difficulty, int threadsPerBlock, std::uint8_t* output, std::uint64_t* validNonce, bool showDeviceInfo);
 #endif
 
 static const std::uint64_t defaultBatchSize = 10000000;
@@ -51,11 +51,11 @@ bool check(const std::vector<std::uint8_t>& hash, int difficulty) {
     return zeros >= difficulty;
 }
 
-std::vector<std::uint8_t> prepare(std::uint32_t block, __uint128_t nonce,
+std::vector<std::uint8_t> prepare(std::uint32_t block, std::uint64_t nonce,
     const std::string& base64Hash, const std::string& miner, size_t& nonceOffset
 ) {
     auto blockXdr = i32ToBytes(block);
-    auto nonceXdr = i128ToBytes(nonce);
+    auto nonceXdr = i64ToBytes(nonce);
     auto entropy = base64Decode(base64Hash);
     auto minerXdr = addressToXdr(miner);
     std::vector<std::uint8_t> truncated(minerXdr.end() - 32, minerXdr.end());
@@ -74,22 +74,22 @@ std::vector<std::uint8_t> prepare(std::uint32_t block, __uint128_t nonce,
     return data;
 }
 
-std::pair<std::vector<std::uint8_t>, __uint128_t> find(std::uint32_t block, const std::string& base64Hash,
-    __uint128_t nonce, int difficulty, const std::string& miner,
+std::pair<std::vector<std::uint8_t>, std::uint64_t> find(std::uint32_t block, const std::string& base64Hash,
+    std::uint64_t nonce, int difficulty, const std::string& miner,
     bool verbose, std::uint64_t batchSize) {
     std::uint64_t counter = 0;
     int hashRateCounter = 0;
     size_t nonceOffset = 0;
     std::vector<std::uint8_t> data = prepare(block, nonce, base64Hash, miner, nonceOffset);
     if (verbose) {
-        std::cout << "[CPU] Mining batch: " << i128ToString(nonce) << " block: " << block
+        std::cout << "[CPU] Mining batch: " << nonce << " block: " << block
                   << " difficulty: " << difficulty << " hash: " << base64Hash << std::endl;
         std::cout.flush();
     }
 
     Keccak256 keccak;
     while (!found.load()) {
-        auto nonceBytes = i128ToBytes(nonce);
+        auto nonceBytes = i64ToBytes(nonce);
         std::copy(nonceBytes.begin(), nonceBytes.end(), data.begin() + nonceOffset);
 
         keccak.reset();
@@ -180,7 +180,7 @@ int main(int argc, char* argv[]) {
         if (gpu) {
             #if GPU == GPU_CUDA
             std::cout << "[GPU] CUDA" << std::endl;
-            __uint128_t currentNonce = nonce;
+            std::uint64_t currentNonce = nonce;
             bool showDeviceInfo = verbose;
             while (!found.load()) {
                 size_t nonceOffset = 0;
@@ -188,9 +188,9 @@ int main(int argc, char* argv[]) {
                 std::vector<std::uint8_t> input(data.size());
                 std::memcpy(input.data(), data.data(), data.size());
                 std::vector<std::uint8_t> output(32);
-                __uint128_t validNonce = 0;
+                std::uint64_t validNonce = 0;
                 if (verbose) {
-                    std::cout << "[GPU] Mining batch: " << i128ToString(nonce) << " block: " << block
+                    std::cout << "[GPU] Mining batch: " << nonce << " block: " << block
                               << " difficulty: " << difficulty << " hash: " << hash << std::endl;
                     std::cout.flush();
                 }
@@ -211,12 +211,12 @@ int main(int argc, char* argv[]) {
             }
             #endif
         } else {
-            __uint128_t currentNonce = nonce;
+            std::uint64_t currentNonce = nonce;
             std::vector<std::thread> threads;
             std::mutex resultMutex;
             while (!found.load()) {
                 while (static_cast<int>(threads.size()) < maxThreads && !found.load()) {
-                    __uint128_t endNonce = currentNonce + batchSize;
+                    std::uint64_t endNonce = currentNonce + batchSize;
                     threads.emplace_back([&, startNonce = currentNonce, endNonce]() {
                         auto localResult = find(block, hash, startNonce, difficulty, miner, verbose, batchSize);
                         if (!localResult.first.empty()) {

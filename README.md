@@ -4,8 +4,6 @@
 
 `kale-miner` is a CPU/GPU miner written in C++ for the [The KALEpail Project](https://github.com/kalepail/KALE-sc) on the Stellar blockchain. It supports **CPU parallel processing**, and **GPU acceleration with CUDA** (OpenCL to be added soon).
 
-> **Note**: Windows compilation is not supported in this update, a bit more work is needed for portable 128 integer types. In the meantime, I recommend you use **WSL** to compile the project on Windows.
-
 ## Performance
 
 ### CPU Performance
