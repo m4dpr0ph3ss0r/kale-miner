@@ -24,19 +24,21 @@ const FarmerStatus = Object.freeze({
 const deepCopy = obj => JSON.parse(JSON.stringify(obj,
     (_key, value) => typeof value === 'bigint' ? value.toString() : value));
 
-async function plant(key, blockData) {
+async function plant(key, blockData, next) {
     try {
         if (signers[key].status !== FarmerStatus.PLANTING) {
             return;
         }
-        const status = await getPail(key, blockData.block);
-        if (!status?.[0]) {
-            const amount = (await strategy.stake(key, deepCopy(blockData))) || signers[key].stake || 0;
+        const data = deepCopy(blockData);
+        data.block = data.block + (next ? 1 : 0);
+        const status = await getPail(key, data.block);
+        if (!status) {
+            const amount = (await strategy.stake(key, data)) || signers[key].stake || 0;
             const response = await invoke('plant', { farmer: key, amount });
             if (response.status !== 'SUCCESS') {
                 throw new Error(`tx Failed: ${response.hash}`);
             }
-            console.log(`Farmer ${key} planted ${blockData.block} with ${Number(amount) / 10000000} KALE`);
+            console.log(`Farmer ${key} planted ${data.block} with ${Number(amount) / 10000000} KALE`);
         }
     } catch(err) {
         const error = getError(err);
@@ -51,7 +53,7 @@ async function harvest(key, block) {
     }
     signers[key].harvested = true;
     const status = await getPail(key, block);
-    if (!!status?.[1]) {
+    if (status?.zeros && status?.sequence) {
         try {
             const response = await invoke('harvest', { farmer: key, block });
             if (response.status !== 'SUCCESS') {
@@ -168,12 +170,12 @@ async function runFarm(interval) {
     let count = 0;
     while (true) {
         const result = await getInstanceData();
-        if (!result?.block || !result?.hash) {
+        if (!result?.block) {
             await new Promise(resolve => setTimeout(resolve, interval));
             continue;
         }
         const changed = result.block !== blockData.block;
-        const elapsedTime = Number(BigInt(Math.floor(Date.now() / 1000)) - BigInt(blockData.details?.timestamp || 0));
+        const elapsedTime = Number(BigInt(Math.floor(Date.now() / 1000)) - BigInt(blockData.details?.timestamp || Math.floor(Date.now() / 1000)));
         const hasElapsed = elapsedTime > 60 * 5 + 10;
         if (changed || hasElapsed) {
             if (changed) {
@@ -184,12 +186,8 @@ async function runFarm(interval) {
                     nativeToScVal(Number(blockData.block), { type: "u32" })]));
                 if (tmpData) {
                     blockData.hash = Buffer.from(tmpData.entropy).toString('base64');
-                    blockData.details = {
-                        pow_zeros: Number(tmpData.pow_zeros),
-                        reclaimed: Number(tmpData.reclaimed),
-                        staked: Number(tmpData.staked),
-                        timestamp: BigInt(tmpData.timestamp)
-                    };
+                    delete tmpData.entropy;
+                    blockData.details = tmpData;
                     console.log(`${JSON.stringify(blockData,
                         (_key, value) => typeof value === 'bigint' ? value.toString() : value)}`);
                 }
@@ -209,10 +207,10 @@ async function runFarm(interval) {
 
         // Plant ASAP to increase returns.
         for (const key in signers) {
+            await plant(key, blockData, hasElapsed);
             if (hasElapsed) {
                 break;
             }
-            await plant(key, blockData);
             await updateStatus(key, blockData.block);
         }
 
@@ -239,14 +237,13 @@ async function runFarm(interval) {
             }
         }
 
-        if (hasElapsed) {
-            continue;
+        if (elapsedTime) {
+            if (count === 0 || count % 7 === 0) {
+                console.log(`Current block is ${blockData.block}, elapsed ${`${Math.floor(elapsedTime / 60)} min ${elapsedTime % 60} sec`}`);
+            }
+            count += 1;
         }
 
-        if (count === 0 || count % 7 === 0) {
-            console.log(`Current block is ${blockData.block}, elapsed ${`${Math.floor(elapsedTime / 60)} min ${elapsedTime % 60} sec`}`);
-        }
-        count += 1;
         await new Promise(resolve => setTimeout(resolve, interval));
     }
 }
@@ -255,10 +252,10 @@ async function updateStatus(key, block) {
     try {
         if (signers[key].status !== FarmerStatus.IDLE) {
             const status = await getPail(key, block);
-            if (!!status?.[1]) {
+            if (status?.zeros) {
                 signers[key].status = FarmerStatus.IDLE;
                 logStatus(key);
-            } else if (!!status?.[0] && signers[key].status !== FarmerStatus.WORKING) {
+            } else if (status?.sequence && signers[key].status !== FarmerStatus.WORKING) {
                 signers[key].status = FarmerStatus.WORKING;
                 logStatus(key);
             }
