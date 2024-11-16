@@ -24,6 +24,13 @@ const FarmerStatus = Object.freeze({
 const deepCopy = obj => JSON.parse(JSON.stringify(obj,
     (_key, value) => typeof value === 'bigint' ? value.toString() : value));
 
+function getReturnValue(resultMetaXdr) {
+    const txMeta = LaunchTube.isValid()
+        ? xdr.TransactionMeta.fromXDR(resultMetaXdr, "base64")
+        : xdr.TransactionMeta.fromXDR(resultMetaXdr.toXDR().toString("base64"), "base64");
+    return txMeta.v3().sorobanMeta().returnValue(); 
+}
+
 async function plant(key, blockData, next) {
     try {
         if (signers[key].status !== FarmerStatus.PLANTING) {
@@ -59,11 +66,7 @@ async function harvest(key, block) {
             if (response.status !== 'SUCCESS') {
                 throw new Error(`tx Failed: ${response.hash}`);
             }
-            const txMeta = LaunchTube.isValid()
-                ? xdr.TransactionMeta.fromXDR(response.resultMetaXdr, "base64")
-                : xdr.TransactionMeta.fromXDR(response.resultMetaXdr.toXDR().toString("base64"), "base64");
-            const returnValue = txMeta.v3().sorobanMeta().returnValue(); 
-            const value = Number(scValToNative(returnValue) || 0);
+            const value = Number(scValToNative(getReturnValue(response.resultMetaXdr)) || 0);
             console.log(`Farmer ${key} harvested block ${block} for ${value / 10000000} KALE`);
         } catch(err) {
             const error = getError(err);
@@ -108,7 +111,8 @@ async function work(mining, key, blockData) {
             if (response.status !== 'SUCCESS') {
                 throw new Error(`tx Failed: ${response.hash}`);
             }
-            console.log(`Farmer ${key} submitted work [${signers[key].work.hash}, ${signers[key].work.nonce}] for ${blockData.block}`);
+            const value = Number(scValToNative(getReturnValue(response.resultMetaXdr)) || 0);
+            console.log(`Farmer ${key} submitted work [hash: ${signers[key].work.hash}, none: ${signers[key].work.nonce}, gap: ${value}] for ${blockData.block}`);
         } catch(err) {
             delete signers[key].work;
             const error = getError(err);
