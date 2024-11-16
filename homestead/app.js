@@ -112,7 +112,7 @@ async function work(mining, key, blockData) {
                 throw new Error(`tx Failed: ${response.hash}`);
             }
             const value = Number(scValToNative(getReturnValue(response.resultMetaXdr)) || 0);
-            console.log(`Farmer ${key} submitted work [hash: ${signers[key].work.hash}, none: ${signers[key].work.nonce}, gap: ${value}] for ${blockData.block}`);
+            console.log(`Farmer ${key} submitted work [hash: ${signers[key].work.hash}, nonce: ${signers[key].work.nonce}, gap: ${value}] for ${blockData.block}`);
         } catch(err) {
             delete signers[key].work;
             const error = getError(err);
