@@ -45,7 +45,7 @@ async function plant(key, blockData, next) {
             if (response.status !== 'SUCCESS') {
                 throw new Error(`tx Failed: ${response.hash}`);
             }
-            console.log(`Farmer ${key} planted ${data.block} with ${Number(amount) / 10000000} KALE`);
+            console.log(`Farmer ${key} planted ${blockData.block} with ${Number(amount) / 10000000} KALE`);
         }
     } catch(err) {
         const error = getError(err);
