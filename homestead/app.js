@@ -6,6 +6,7 @@
 const express = require('express');
 const { xdr, nativeToScVal, scValToNative } = require('@stellar/stellar-sdk');
 const { spawn } = require('child_process');
+const path = require('path');
 const routes = require('./routes');
 const config = require(process.env.CONFIG || './config.json');
 const strategy = require('./strategy.js');
@@ -135,7 +136,8 @@ async function mine(minerExec, block, hash, nonce, difficulty, key, maxThreads, 
 
         console.log(`Farmer ${key} process started with command: ${args}\n====MINING JOB=====\n`);
         let output = '';
-        const minerProc = spawn(minerExec, args);
+        const miner = path.resolve(minerExec);
+        const minerProc = spawn(miner, args, { cwd: path.dirname(miner) });
         minerProc.stdout.on('data', (data) => {
             const lines = `${data}`.split('\n');
             lines.forEach((line) => {

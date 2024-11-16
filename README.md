@@ -1,8 +1,12 @@
 # kale-miner
 
-## CPU/GPU miner for [The KALEpail Project](https://github.com/kalepail/KALE-sc)
+## CPU/GPU Miner for KALE
 
-`kale-miner` is a CPU/GPU miner written in C++ for the [The KALEpail Project](https://github.com/kalepail/KALE-sc) on the Stellar blockchain. It supports **CPU parallel processing**, and **GPU acceleration with CUDA** (OpenCL to be added soon).
+`kale-miner` is a CPU/GPU miner written in C++ for [KALE](https://stellar.expert/explorer/public/contract/CB23WRDQWGSP6YPMY4UV5C4OW5CBTXKYN3XEATG7KJEZCXMJBYEHOUOV) on the [Stellar](https://stellar.org/) blockchain. It supports **CPU parallel processing**, and **GPU acceleration with CUDA or OpenCL**.
+
+Learn more about KALE:
+- [The KALEpail Project](https://github.com/kalepail/KALE-sc) by [kalepail](https://github.com/kalepail)
+- [KALE Fan Fiction Lore](https://kalepail.com/kale/kale-chapter-1) by [briwylde08](https://github.com/briwylde08)
 
 ## Performance
 
@@ -17,7 +21,7 @@ With GPU acceleration enabled on an **NVIDIA GeForce RTX 4080** GPU, the miner a
 | GPU           | Framework | Avg. Hash Rate |
 |---------------------|-----------|-------------------|
 | NVIDIA GeForce RTX 4080 | CUDA      | ~1.9 GH/s     |
-| NVIDIA GeForce RTX 4080 | OPENCL      | TBD     |
+| NVIDIA GeForce RTX 4080 | OPENCL      | ~1.3 GH/s     |
 
 ### Keccak Hashing
 
@@ -32,6 +36,14 @@ You may want to explore more keccak implementations here [keccak.team/software](
 
 - **NVIDIA CUDA-Capable GPU** with compute capability 3.0 or higher
 - [**NVIDIA CUDA Toolkit**](https://developer.nvidia.com/cuda-toolkit)
+
+### GPU Build (OpenCL)
+
+- **OpenCL 3.0** or higher
+- **OpenCL SDK**
+  - for NVIDIA: [NVIDIA CUDA Toolkit (includes OpenCL)](https://developer.nvidia.com/cuda-toolkit)
+  - for AMD: [AMD SDK (supports OpenCL)](https://developer.amd.com/tools-and-sdks/)
+  - for Intel: [Intel SDK for OpenCL](http://software.intel.com/en-us/vcsource/tools/opencl-sdk)
 
 ## Compilation
 
@@ -48,10 +60,21 @@ make
 
 To compile the miner with GPU support, run:
 
+CUDA:
+
 ```bash
 make clean
 make GPU=CUDA
 ```
+
+or OpenCL:
+
+```bash
+make clean
+make GPU=OPENCL
+```
+
+Note: The current OpenCL implementation uses the `cl_khr_int64_base_atomics` extension for atomic operations on 64-bit integers. Make sure your device supports it.
 
 ## Usage
 

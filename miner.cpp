@@ -24,6 +24,7 @@
 
 #define GPU_NONE 0
 #define GPU_CUDA 1
+#define GPU_OPENCL 2
 
 #ifndef GPU
 #define GPU GPU_NONE
@@ -31,6 +32,11 @@
 
 #if GPU == GPU_CUDA
 #include <cuda_runtime.h>
+extern "C" int executeKernel(int deviceId, std::uint8_t* data, int dataSize, std::uint64_t startNonce, int nonceOffset,
+    std::uint64_t batchSize, int difficulty, int threadsPerBlock, std::uint8_t* output, std::uint64_t* validNonce, bool showDeviceInfo);
+#elif GPU == GPU_OPENCL
+#define CL_TARGET_OPENCL_VERSION 300
+#include <CL/cl.h>
 extern "C" int executeKernel(int deviceId, std::uint8_t* data, int dataSize, std::uint64_t startNonce, int nonceOffset,
     std::uint64_t batchSize, int difficulty, int threadsPerBlock, std::uint8_t* output, std::uint64_t* validNonce, bool showDeviceInfo);
 #endif
@@ -165,7 +171,7 @@ int main(int argc, char* argv[]) {
         }  else if (std::strcmp(argv[i], "--verbose") == 0) {
             verbose = true;
         } else if (std::strcmp(argv[i], "--gpu") == 0) {
-        #if GPU == GPU_CUDA
+        #if GPU == GPU_CUDA || GPU == GPU_OPENCL
             gpu = true;
         #else
             std::cerr << "GPU support not enabled in this build.\n";
@@ -179,7 +185,11 @@ int main(int argc, char* argv[]) {
         std::pair<std::vector<std::uint8_t>, std::uint64_t> result;
         if (gpu) {
             #if GPU == GPU_CUDA
-            std::cout << "[GPU] CUDA" << std::endl;
+                std::cout << "[GPU] CUDA" << std::endl;
+            #elif GPU == GPU_OPENCL
+                std::cout << "[GPU] OpenCL" << std::endl;
+            #endif
+            #if GPU == GPU_CUDA || GPU == GPU_OPENCL
             std::uint64_t currentNonce = nonce;
             bool showDeviceInfo = verbose;
             while (!found.load()) {

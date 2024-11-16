@@ -24,6 +24,7 @@ profile-data/
 *.obj
 *.makefile
 testminer
+prodminer
 !sample-scripts/*
 setup/
 *.prod.sh

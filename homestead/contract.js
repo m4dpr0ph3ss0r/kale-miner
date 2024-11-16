@@ -5,7 +5,7 @@
 
 const { SorobanRpc, Horizon, xdr, Address, Operation, Asset, Contract, Networks, TransactionBuilder, StrKey, Keypair, nativeToScVal, scValToNative } = require('@stellar/stellar-sdk');
 const config = require(process.env.CONFIG || './config.json');
-const rpc = new SorobanRpc.Server(process.env.RPC_URL || config.stellar?.rpc);
+const rpc = new SorobanRpc.Server(process.env.RPC_URL || config.stellar?.rpc, { allowHttp: true });
 const horizon = new Horizon.Server(config.stellar?.horizon || 'https://horizon.stellar.org', { allowHttp: true });
 const contractId = config.stellar?.contract;
 const fees = config.stellar?.fees || 10000000;
