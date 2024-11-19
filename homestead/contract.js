@@ -46,16 +46,13 @@ const contractErrors = Object.freeze({
     14: 'HarvestNotReady'
 });
 
-function getError(error) {
-    function stringify(value) {
-        return typeof value === 'object' && value !== null
-            ? JSON.stringify(value) : (value || '');
-    }
-    const match = error.toString().match(/Error\(Contract, #(\d+)\)/);
-    if (match) {
-        return contractErrors[parseInt(match[1], 10)];
-    }
-    return stringify(error) || '';
+const getError = (error) => {
+    return contractErrors[parseInt((msg = error instanceof Error
+        ? error.message
+        : (typeof error === 'object'
+            ? (JSON.stringify(error) || error.toString())
+            : String(error)))
+                .match(/Error\(Contract, #(\d+)\)/)?.[1] || 0, 10)] || msg; 
 }
 
 async function getInstanceData() {
@@ -154,7 +151,8 @@ async function getResponse(response, launchTube) {
 }
 
 async function invoke(method, data) {
-    if (!StrKey.isValidEd25519SecretSeed(signers[data.farmer].secret)) {
+    const farmer = signers[data.farmer] || {};
+    if (!StrKey.isValidEd25519SecretSeed(farmer.secret)) {
         console.error("Unauthorized:", data.farmer);
         return null;
     }
@@ -183,7 +181,7 @@ async function invoke(method, data) {
         .setTimeout(300)
         .build();
     transaction = await rpc.prepareTransaction(transaction);
-    transaction.sign(Keypair.fromSecret(signers[data.farmer].secret));
+    transaction.sign(Keypair.fromSecret(farmer.secret));
 
     if (LaunchTube.isValid()) {
         return await getResponse(await LaunchTube.send(transaction.toEnvelope().toXDR('base64'), fees), true);

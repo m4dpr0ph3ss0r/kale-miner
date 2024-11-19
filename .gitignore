@@ -29,3 +29,5 @@ prodminer
 setup/
 *.prod.sh
 *.prod.js
+*/miner.js
+*/*.html

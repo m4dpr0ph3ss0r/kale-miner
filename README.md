@@ -99,14 +99,14 @@ Note: The current OpenCL implementation uses the `cl_khr_int64_base_atomics` ext
 
 Example:
 ```bash
-./miner 37 AAAAAAn66y/43JP7M02rwTmONZoWOmu1OPYz/bmzJ8o= 13391834480 8 GBQHTQ7NTSKHVTSVM6EHUO3TU4P4BK2TAAII25V2TT2Q6OWXUJWEKALE --max-threads 24 --batch-size 10000000 --verbose
+./miner 37 AAAAAAn66y/43JP7M02rwTmONZoWOmu1OPYz/bmzJ8o= 20495217909 8 GBQHTQ7NTSKHVTSVM6EHUO3TU4P4BK2TAAII25V2TT2Q6OWXUJWEKALE --max-threads 4 --batch-size 10000000 --verbose
 ```
 
 Should output:
 ```json
 {
-  "hash": "00000000d60a45d3b6c17d3e45a9e5b14014784961876fe240042f985da91eeb",
-  "nonce": 13391834489
+  "hash": "0000000099be0037e5a48324959cb9dd10965ae59511cfd1996f9b917aad9980",
+  "nonce": 20495217910
 }
 ```
 

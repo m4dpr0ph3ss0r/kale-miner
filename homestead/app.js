@@ -4,6 +4,7 @@
  */
 
 const express = require('express');
+const cors = require('cors');
 const { xdr, nativeToScVal, scValToNative } = require('@stellar/stellar-sdk');
 const { spawn } = require('child_process');
 const path = require('path');
@@ -15,6 +16,8 @@ const app = express();
 const PORT = process.env.PORT || 3002;
 const pollInterval = 5 * 1000;
 let elapsedBlock = 0;
+
+app.use(cors());
 
 const FarmerStatus = Object.freeze({
     PLANTING: 1,
@@ -33,12 +36,12 @@ function getReturnValue(resultMetaXdr) {
 }
 
 async function plant(key, blockData, next) {
+    const data = deepCopy(blockData);
+    data.block = data.block + (next ? 1 : 0);
     try {
         if (signers[key].status !== FarmerStatus.PLANTING) {
             return;
         }
-        const data = deepCopy(blockData);
-        data.block = data.block + (next ? 1 : 0);
         const status = await getPail(key, data.block);
         if (!status) {
             const amount = (await strategy.stake(key, data)) || signers[key].stake || 0;
@@ -50,7 +53,7 @@ async function plant(key, blockData, next) {
         }
     } catch(err) {
         const error = getError(err);
-        console.error(`Farmer ${key} could not plant ${blockData.block}: ${error}`);
+        console.error(`Farmer ${key} could not plant ${data.block} (next: ${next}): ${error}`);
         await new Promise(resolve => setTimeout(resolve, pollInterval));
     }
 }
@@ -182,7 +185,7 @@ async function runFarm(interval) {
         }
         const changed = result.block !== blockData.block;
         const elapsedTime = Number(BigInt(Math.floor(Date.now() / 1000)) - BigInt(blockData.details?.timestamp || Math.floor(Date.now() / 1000)));
-        const hasElapsed = elapsedTime > 60 * 5 + 10;
+        const hasElapsed = elapsedTime > 60 * 5 + 15;
         if (changed || hasElapsed) {
             if (changed) {
                 console.log(`New block detected ${result.block}`);
@@ -222,6 +225,9 @@ async function runFarm(interval) {
 
         // Harvest previous block.
         for (const key in signers) {
+            if (hasElapsed) {
+                break;
+            }
             await harvest(key, blockData.block - 1);
         }
 

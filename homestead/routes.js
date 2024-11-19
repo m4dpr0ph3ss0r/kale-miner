@@ -6,6 +6,7 @@
 const express = require('express');
 const { invoke, blockData, balances } = require('./contract');
 const router = express.Router();
+const path = require('path');
 
 router.get('/plant', async (req, res) => {
     const { farmer, amount } = req.query;
@@ -48,6 +49,10 @@ router.get('/data', async (req, res) => {
         return obj;
     }
     res.json(convert(blockData));
+});
+
+router.get('/shader', (req, res) => {
+    res.sendFile(path.join(__dirname, '../utils/keccak.wgsl'));
 });
 
 router.get('/balances', async (req, res) => {
