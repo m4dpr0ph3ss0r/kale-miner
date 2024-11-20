@@ -90,73 +90,241 @@ fn uint64Rotl(a: uint64, n: u32) -> uint64 {
 }
 
 fn keccakF1600(state: ptr<function, array<u32, 200>>) {
-    var state64: array<uint64, 25>;
-    for (var i: u32 = 0u; i < 25u; i = i + 1u) {
-        state64[i] = uint64FromBytes(state, i * 8u);
-    }
+    var s0: uint64 = uint64FromBytes(state, 0u * 8u);
+    var s1: uint64 = uint64FromBytes(state, 1u * 8u);
+    var s2: uint64 = uint64FromBytes(state, 2u * 8u);
+    var s3: uint64 = uint64FromBytes(state, 3u * 8u);
+    var s4: uint64 = uint64FromBytes(state, 4u * 8u);
+    var s5: uint64 = uint64FromBytes(state, 5u * 8u);
+    var s6: uint64 = uint64FromBytes(state, 6u * 8u);
+    var s7: uint64 = uint64FromBytes(state, 7u * 8u);
+    var s8: uint64 = uint64FromBytes(state, 8u * 8u);
+    var s9: uint64 = uint64FromBytes(state, 9u * 8u);
+    var s10: uint64 = uint64FromBytes(state, 10u * 8u);
+    var s11: uint64 = uint64FromBytes(state, 11u * 8u);
+    var s12: uint64 = uint64FromBytes(state, 12u * 8u);
+    var s13: uint64 = uint64FromBytes(state, 13u * 8u);
+    var s14: uint64 = uint64FromBytes(state, 14u * 8u);
+    var s15: uint64 = uint64FromBytes(state, 15u * 8u);
+    var s16: uint64 = uint64FromBytes(state, 16u * 8u);
+    var s17: uint64 = uint64FromBytes(state, 17u * 8u);
+    var s18: uint64 = uint64FromBytes(state, 18u * 8u);
+    var s19: uint64 = uint64FromBytes(state, 19u * 8u);
+    var s20: uint64 = uint64FromBytes(state, 20u * 8u);
+    var s21: uint64 = uint64FromBytes(state, 21u * 8u);
+    var s22: uint64 = uint64FromBytes(state, 22u * 8u);
+    var s23: uint64 = uint64FromBytes(state, 23u * 8u);
+    var s24: uint64 = uint64FromBytes(state, 24u * 8u);
 
-    var C: array<uint64, 5>;
-    var D: uint64;
-    var B: array<uint64, 25>;
+    var C0: uint64;
+    var C1: uint64;
+    var C2: uint64;
+    var C3: uint64;
+    var C4: uint64;
+    var D0: uint64;
+    var D1: uint64;
+    var D2: uint64;
+    var D3: uint64;
+    var D4: uint64;
+
+    var B0: uint64;
+    var B1: uint64;
+    var B2: uint64;
+    var B3: uint64;
+    var B4: uint64;
+    var B5: uint64;
+    var B6: uint64;
+    var B7: uint64;
+    var B8: uint64;
+    var B9: uint64;
+    var B10: uint64;
+    var B11: uint64;
+    var B12: uint64;
+    var B13: uint64;
+    var B14: uint64;
+    var B15: uint64;
+    var B16: uint64;
+    var B17: uint64;
+    var B18: uint64;
+    var B19: uint64;
+    var B20: uint64;
+    var B21: uint64;
+    var B22: uint64;
+    var B23: uint64;
+    var B24: uint64;
+
     for (var round: u32 = 0u; round < 24u; round = round + 1u) {
         // θ step
-        for (var x: u32 = 0u; x < 5u; x = x + 1u) {
-            C[x] = uint64Xor(
-                uint64Xor(
-                    uint64Xor(
-                        uint64Xor(state64[x], state64[x + 5u]),
-                        state64[x + 10u]
-                    ),
-                    state64[x + 15u]
-                ),
-                state64[x + 20u]
-            );
-        }
-        for (var x: u32 = 0u; x < 5u; x = x + 1u) {
-            D = uint64Xor(
-                C[(x + 4u) % 5u],
-                uint64Rotl(C[(x + 1u) % 5u], 1u)
-            );
-            for (var y: u32 = 0u; y < 5u; y = y + 1u) {
-                let idx = x + y * 5u;
-                state64[idx] = uint64Xor(state64[idx], D);
-            }
-        }
+        C0 = uint64Xor(uint64Xor(uint64Xor(uint64Xor(s0, s5), s10), s15), s20);
+        C1 = uint64Xor(uint64Xor(uint64Xor(uint64Xor(s1, s6), s11), s16), s21);
+        C2 = uint64Xor(uint64Xor(uint64Xor(uint64Xor(s2, s7), s12), s17), s22);
+        C3 = uint64Xor(uint64Xor(uint64Xor(uint64Xor(s3, s8), s13), s18), s23);
+        C4 = uint64Xor(uint64Xor(uint64Xor(uint64Xor(s4, s9), s14), s19), s24);
+
+        D0 = uint64Xor(C4, uint64Rotl(C1, 1u));
+        D1 = uint64Xor(C0, uint64Rotl(C2, 1u));
+        D2 = uint64Xor(C1, uint64Rotl(C3, 1u));
+        D3 = uint64Xor(C2, uint64Rotl(C4, 1u));
+        D4 = uint64Xor(C3, uint64Rotl(C0, 1u));
+
+        s0 = uint64Xor(s0, D0);
+        s5 = uint64Xor(s5, D0);
+        s10 = uint64Xor(s10, D0);
+        s15 = uint64Xor(s15, D0);
+        s20 = uint64Xor(s20, D0);
+
+        s1 = uint64Xor(s1, D1);
+        s6 = uint64Xor(s6, D1);
+        s11 = uint64Xor(s11, D1);
+        s16 = uint64Xor(s16, D1);
+        s21 = uint64Xor(s21, D1);
+
+        s2 = uint64Xor(s2, D2);
+        s7 = uint64Xor(s7, D2);
+        s12 = uint64Xor(s12, D2);
+        s17 = uint64Xor(s17, D2);
+        s22 = uint64Xor(s22, D2);
+
+        s3 = uint64Xor(s3, D3);
+        s8 = uint64Xor(s8, D3);
+        s13 = uint64Xor(s13, D3);
+        s18 = uint64Xor(s18, D3);
+        s23 = uint64Xor(s23, D3);
+
+        s4 = uint64Xor(s4, D4);
+        s9 = uint64Xor(s9, D4);
+        s14 = uint64Xor(s14, D4);
+        s19 = uint64Xor(s19, D4);
+        s24 = uint64Xor(s24, D4);
 
         // ρ and π steps
-        for (var x: u32 = 0u; x < 5u; x = x + 1u) {
-            for (var y: u32 = 0u; y < 5u; y = y + 1u) {
-                let index = x + y * 5u;
-                let rot = uint64Rotl(
-                    state64[index],
-                    rotationConstants[index]
-                );
-                let newIndex = y + ((2u * x + 3u * y) % 5u) * 5u;
-                B[newIndex] = rot;
-            }
-        }
+        B0 = s0;
+        B1 = uint64Rotl(s6, 44u);
+        B2 = uint64Rotl(s12, 43u);
+        B3 = uint64Rotl(s18, 21u);
+        B4 = uint64Rotl(s24, 14u);
+        B5 = uint64Rotl(s3, 28u);
+        B6 = uint64Rotl(s9, 20u);
+        B7 = uint64Rotl(s10, 3u);
+        B8 = uint64Rotl(s16, 45u);
+        B9 = uint64Rotl(s22, 61u);
+        B10 = uint64Rotl(s1, 1u);
+        B11 = uint64Rotl(s7, 6u);
+        B12 = uint64Rotl(s13, 25u);
+        B13 = uint64Rotl(s19, 8u);
+        B14 = uint64Rotl(s20, 18u);
+        B15 = uint64Rotl(s4, 27u);
+        B16 = uint64Rotl(s5, 36u);
+        B17 = uint64Rotl(s11, 10u);
+        B18 = uint64Rotl(s17, 15u);
+        B19 = uint64Rotl(s23, 56u);
+        B20 = uint64Rotl(s2, 62u);
+        B21 = uint64Rotl(s8, 55u);
+        B22 = uint64Rotl(s14, 39u);
+        B23 = uint64Rotl(s15, 41u);
+        B24 = uint64Rotl(s21, 2u);
 
         // χ step
-        for (var y: u32 = 0u; y < 5u; y = y + 1u) {
-            for (var x: u32 = 0u; x < 5u; x = x + 1u) {
-                let index = x + y * 5u;
-                state64[index] = uint64Xor(
-                    B[index],
-                    uint64And(
-                        uint64Not(B[((x + 1u) % 5u) + y * 5u]),
-                        B[((x + 2u) % 5u) + y * 5u]
-                    )
-                );
-            }
-        }
+        var t0: uint64;
+        var t1: uint64;
+        var t2: uint64;
+        var t3: uint64;
+        var t4: uint64;
+
+        // Row 0
+        t0 = B0;
+        t1 = B1;
+        t2 = B2;
+        t3 = B3;
+        t4 = B4;
+
+        s0 = uint64Xor(t0, uint64And(uint64Not(t1), t2));
+        s1 = uint64Xor(t1, uint64And(uint64Not(t2), t3));
+        s2 = uint64Xor(t2, uint64And(uint64Not(t3), t4));
+        s3 = uint64Xor(t3, uint64And(uint64Not(t4), t0));
+        s4 = uint64Xor(t4, uint64And(uint64Not(t0), t1));
+
+        // Row 1
+        t0 = B5;
+        t1 = B6;
+        t2 = B7;
+        t3 = B8;
+        t4 = B9;
+
+        s5 = uint64Xor(t0, uint64And(uint64Not(t1), t2));
+        s6 = uint64Xor(t1, uint64And(uint64Not(t2), t3));
+        s7 = uint64Xor(t2, uint64And(uint64Not(t3), t4));
+        s8 = uint64Xor(t3, uint64And(uint64Not(t4), t0));
+        s9 = uint64Xor(t4, uint64And(uint64Not(t0), t1));
+
+        // Row 2
+        t0 = B10;
+        t1 = B11;
+        t2 = B12;
+        t3 = B13;
+        t4 = B14;
+
+        s10 = uint64Xor(t0, uint64And(uint64Not(t1), t2));
+        s11 = uint64Xor(t1, uint64And(uint64Not(t2), t3));
+        s12 = uint64Xor(t2, uint64And(uint64Not(t3), t4));
+        s13 = uint64Xor(t3, uint64And(uint64Not(t4), t0));
+        s14 = uint64Xor(t4, uint64And(uint64Not(t0), t1));
+
+        // Row 3
+        t0 = B15;
+        t1 = B16;
+        t2 = B17;
+        t3 = B18;
+        t4 = B19;
+
+        s15 = uint64Xor(t0, uint64And(uint64Not(t1), t2));
+        s16 = uint64Xor(t1, uint64And(uint64Not(t2), t3));
+        s17 = uint64Xor(t2, uint64And(uint64Not(t3), t4));
+        s18 = uint64Xor(t3, uint64And(uint64Not(t4), t0));
+        s19 = uint64Xor(t4, uint64And(uint64Not(t0), t1));
+
+        // Row 4
+        t0 = B20;
+        t1 = B21;
+        t2 = B22;
+        t3 = B23;
+        t4 = B24;
+
+        s20 = uint64Xor(t0, uint64And(uint64Not(t1), t2));
+        s21 = uint64Xor(t1, uint64And(uint64Not(t2), t3));
+        s22 = uint64Xor(t2, uint64And(uint64Not(t3), t4));
+        s23 = uint64Xor(t3, uint64And(uint64Not(t4), t0));
+        s24 = uint64Xor(t4, uint64And(uint64Not(t0), t1));
 
         // ι step
-        state64[0u] = uint64Xor(state64[0u], roundConstants[round]);
+        s0 = uint64Xor(s0, roundConstants[round]);
     }
 
-    for (var i: u32 = 0u; i < 25u; i = i + 1u) {
-        uint64ToBytes(state64[i], state, i * 8u);
-    }
+    uint64ToBytes(s0, state, 0u * 8u);
+    uint64ToBytes(s1, state, 1u * 8u);
+    uint64ToBytes(s2, state, 2u * 8u);
+    uint64ToBytes(s3, state, 3u * 8u);
+    uint64ToBytes(s4, state, 4u * 8u);
+    uint64ToBytes(s5, state, 5u * 8u);
+    uint64ToBytes(s6, state, 6u * 8u);
+    uint64ToBytes(s7, state, 7u * 8u);
+    uint64ToBytes(s8, state, 8u * 8u);
+    uint64ToBytes(s9, state, 9u * 8u);
+    uint64ToBytes(s10, state, 10u * 8u);
+    uint64ToBytes(s11, state, 11u * 8u);
+    uint64ToBytes(s12, state, 12u * 8u);
+    uint64ToBytes(s13, state, 13u * 8u);
+    uint64ToBytes(s14, state, 14u * 8u);
+    uint64ToBytes(s15, state, 15u * 8u);
+    uint64ToBytes(s16, state, 16u * 8u);
+    uint64ToBytes(s17, state, 17u * 8u);
+    uint64ToBytes(s18, state, 18u * 8u);
+    uint64ToBytes(s19, state, 19u * 8u);
+    uint64ToBytes(s20, state, 20u * 8u);
+    uint64ToBytes(s21, state, 21u * 8u);
+    uint64ToBytes(s22, state, 22u * 8u);
+    uint64ToBytes(s23, state, 23u * 8u);
+    uint64ToBytes(s24, state, 24u * 8u);
 }
 
 fn keccak256_update(state: ptr<function, array<u32, 200>>, offset: u32, data: ptr<function, array<u32, 256>>, length: u32) -> u32 {
