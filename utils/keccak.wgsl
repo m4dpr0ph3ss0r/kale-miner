@@ -1,3 +1,15 @@
+/*
+    MIT License
+    Author: Fred Kyung-jin Rezeau <fred@litemint.com>, 2024
+    Permission is granted to use, copy, modify, and distribute this software for any purpose
+    with or without fee.
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
+
+    Description:
+    WGSL Compute shader implementing int32-based Keccak-256 for KALE mining. `keccakF1600` is
+    fully unrolled to eliminate loop overhead and enhance parallel execution on WebGPU.
+*/
+
 @group(0) @binding(0) var<storage, read> inputData: array<u32>;
 @group(0) @binding(1) var<uniform> params: vec3<u32>;
 @group(0) @binding(2) var<uniform> nonce: vec3<u32>;

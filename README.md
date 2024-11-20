@@ -227,7 +227,7 @@ module.exports = {
 
 ### Homestead Server API (Advanced Users)
 
-The Homestead server provides several API endpoints to allow manual interactions with the KALE farming process, including `/plant`, `/work`, `/harvest`, `/data` and `/balances`. Feel free to use these endpoints to experiment with individual steps in the farming cycle.
+The Homestead server provides several API endpoints to allow manual interactions with the KALE farming process, including `/plant`, `/work`, `/harvest`, `/data`, `/balances` and `/shader` (serving the [WebGPU compute shader](https://github.com/FredericRezeau/kale-miner/blob/main/utils/keccak.wgsl)). Feel free to use these endpoints to experiment with individual steps in the farming cycle.
 
 Open `homestead/routes.js` for more details.
 
