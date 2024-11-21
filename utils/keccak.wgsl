@@ -6,8 +6,11 @@
     THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
 
     Description:
-    WGSL Compute shader implementing int32-based Keccak-256 for KALE mining. `keccakF1600` is
-    fully unrolled to eliminate loop overhead and enhance parallel execution on WebGPU.
+    WGSL WebGPU compute shader implementing int32-based Keccak-256 hashing for KALE mining.
+    
+    Performance Notes:
+    - Averages 1.1 GH/s on Chrome using an NVIDIA GeForce RTX 4080 with the Direct3D backend on Windows 11.
+    - Metal backend currently underperforms and requires further optimization and debugging.
 */
 
 @group(0) @binding(0) var<storage, read> inputData: array<u32>;
@@ -22,33 +25,16 @@ struct uint64 {
     high: u32
 };
 
-struct Keccak256Context {
-    state: array<u32, 200>,
-    offset: u32
+struct slice {
+    s0: u32, s1: u32, s2: u32, s3: u32,
+    s4: u32, s5: u32, s6: u32, s7: u32,
+    s8: u32, s9: u32, s10: u32, s11: u32,
+    s12: u32, s13: u32, s14: u32, s15: u32,
+    s16: u32, s17: u32, s18: u32, s19: u32,
+    s20: u32, s21: u32, s22: u32, s23: u32,
+    s24: u32, s25: u32, s26: u32, s27: u32,
+    s28: u32, s29: u32, s30: u32, s31: u32
 };
-
-const roundConstants = array<uint64, 24>(
-    uint64(0x00000001u, 0x00000000u), uint64(0x00008082u, 0x00000000u),
-    uint64(0x0000808au, 0x80000000u), uint64(0x80008000u, 0x80000000u),
-    uint64(0x0000808bu, 0x00000000u), uint64(0x80000001u, 0x00000000u),
-    uint64(0x80008081u, 0x80000000u), uint64(0x00008009u, 0x80000000u),
-    uint64(0x0000008au, 0x00000000u), uint64(0x00000088u, 0x00000000u),
-    uint64(0x80008009u, 0x00000000u), uint64(0x8000000au, 0x00000000u),
-    uint64(0x8000808bu, 0x00000000u), uint64(0x0000008bu, 0x80000000u),
-    uint64(0x00008089u, 0x80000000u), uint64(0x00008003u, 0x80000000u),
-    uint64(0x00008002u, 0x80000000u), uint64(0x00000080u, 0x80000000u),
-    uint64(0x0000800au, 0x00000000u), uint64(0x8000000au, 0x80000000u),
-    uint64(0x80008081u, 0x80000000u), uint64(0x00008080u, 0x80000000u),
-    uint64(0x80000001u, 0x00000000u), uint64(0x80008008u, 0x80000000u)
-);
-
-const rotationConstants = array<u32, 25>(
-    0u, 1u, 62u, 28u, 27u,
-    36u, 44u, 6u, 55u, 20u,
-    3u, 10u, 43u, 25u, 39u,
-    41u, 45u, 15u, 21u, 8u,
-    18u, 2u, 61u, 56u, 14u
-);
 
 fn uint64FromBytes(bytes: ptr<function, array<u32, 200>>, offset: u32) -> uint64 {
     return uint64(
@@ -86,7 +72,7 @@ fn uint64Not(a: uint64) -> uint64 {
 }
 
 fn uint64Rotl(a: uint64, n: u32) -> uint64 {
-    let nmod = n % 64u;
+    let nmod: u32 = n % 64u;
     if (nmod == 0u) {
         return a;
     } else if (nmod < 32u) {
@@ -95,10 +81,14 @@ fn uint64Rotl(a: uint64, n: u32) -> uint64 {
     } else if (nmod == 32u) {
         return uint64(a.high, a.low);
     } else {
-        let shift = nmod - 32u;
+        let shift: u32 = nmod - 32u;
         return uint64((a.high << shift) | (a.low >> (32u - shift)),
             (a.low << shift) | (a.high >> (32u - shift)));
     }
+}
+
+fn xorState(state: ptr<function, array<u32, 200>>, index: u32, x: u32) {
+    (*state)[index] ^= x;
 }
 
 fn keccakF1600(state: ptr<function, array<u32, 200>>) {
@@ -128,42 +118,13 @@ fn keccakF1600(state: ptr<function, array<u32, 200>>) {
     var s23: uint64 = uint64FromBytes(state, 23u * 8u);
     var s24: uint64 = uint64FromBytes(state, 24u * 8u);
 
-    var C0: uint64;
-    var C1: uint64;
-    var C2: uint64;
-    var C3: uint64;
-    var C4: uint64;
-    var D0: uint64;
-    var D1: uint64;
-    var D2: uint64;
-    var D3: uint64;
-    var D4: uint64;
-
-    var B0: uint64;
-    var B1: uint64;
-    var B2: uint64;
-    var B3: uint64;
-    var B4: uint64;
-    var B5: uint64;
-    var B6: uint64;
-    var B7: uint64;
-    var B8: uint64;
-    var B9: uint64;
-    var B10: uint64;
-    var B11: uint64;
-    var B12: uint64;
-    var B13: uint64;
-    var B14: uint64;
-    var B15: uint64;
-    var B16: uint64;
-    var B17: uint64;
-    var B18: uint64;
-    var B19: uint64;
-    var B20: uint64;
-    var B21: uint64;
-    var B22: uint64;
-    var B23: uint64;
-    var B24: uint64;
+    var C0: uint64; var C1: uint64; var C2: uint64; var C3: uint64; var C4: uint64;
+    var D0: uint64; var D1: uint64; var D2: uint64; var D3: uint64; var D4: uint64;
+    var B0: uint64; var B1: uint64; var B2: uint64; var B3: uint64; var B4: uint64;
+    var B5: uint64; var B6: uint64; var B7: uint64; var B8: uint64; var B9: uint64;
+    var B10: uint64; var B11: uint64; var B12: uint64; var B13: uint64; var B14: uint64;
+    var B15: uint64; var B16: uint64; var B17: uint64; var B18: uint64; var B19: uint64;
+    var B20: uint64; var B21: uint64; var B22: uint64; var B23: uint64; var B24: uint64;
 
     for (var round: u32 = 0u; round < 24u; round = round + 1u) {
         // θ step
@@ -242,66 +203,31 @@ fn keccakF1600(state: ptr<function, array<u32, 200>>) {
         var t2: uint64;
         var t3: uint64;
         var t4: uint64;
-
-        // Row 0
-        t0 = B0;
-        t1 = B1;
-        t2 = B2;
-        t3 = B3;
-        t4 = B4;
-
+        t0 = B0; t1 = B1; t2 = B2; t3 = B3; t4 = B4;
         s0 = uint64Xor(t0, uint64And(uint64Not(t1), t2));
         s1 = uint64Xor(t1, uint64And(uint64Not(t2), t3));
         s2 = uint64Xor(t2, uint64And(uint64Not(t3), t4));
         s3 = uint64Xor(t3, uint64And(uint64Not(t4), t0));
         s4 = uint64Xor(t4, uint64And(uint64Not(t0), t1));
-
-        // Row 1
-        t0 = B5;
-        t1 = B6;
-        t2 = B7;
-        t3 = B8;
-        t4 = B9;
-
+        t0 = B5; t1 = B6; t2 = B7; t3 = B8; t4 = B9;
         s5 = uint64Xor(t0, uint64And(uint64Not(t1), t2));
         s6 = uint64Xor(t1, uint64And(uint64Not(t2), t3));
         s7 = uint64Xor(t2, uint64And(uint64Not(t3), t4));
         s8 = uint64Xor(t3, uint64And(uint64Not(t4), t0));
         s9 = uint64Xor(t4, uint64And(uint64Not(t0), t1));
-
-        // Row 2
-        t0 = B10;
-        t1 = B11;
-        t2 = B12;
-        t3 = B13;
-        t4 = B14;
-
+        t0 = B10; t1 = B11; t2 = B12; t3 = B13; t4 = B14;
         s10 = uint64Xor(t0, uint64And(uint64Not(t1), t2));
         s11 = uint64Xor(t1, uint64And(uint64Not(t2), t3));
         s12 = uint64Xor(t2, uint64And(uint64Not(t3), t4));
         s13 = uint64Xor(t3, uint64And(uint64Not(t4), t0));
         s14 = uint64Xor(t4, uint64And(uint64Not(t0), t1));
-
-        // Row 3
-        t0 = B15;
-        t1 = B16;
-        t2 = B17;
-        t3 = B18;
-        t4 = B19;
-
+        t0 = B15; t1 = B16; t2 = B17; t3 = B18; t4 = B19;
         s15 = uint64Xor(t0, uint64And(uint64Not(t1), t2));
         s16 = uint64Xor(t1, uint64And(uint64Not(t2), t3));
         s17 = uint64Xor(t2, uint64And(uint64Not(t3), t4));
         s18 = uint64Xor(t3, uint64And(uint64Not(t4), t0));
         s19 = uint64Xor(t4, uint64And(uint64Not(t0), t1));
-
-        // Row 4
-        t0 = B20;
-        t1 = B21;
-        t2 = B22;
-        t3 = B23;
-        t4 = B24;
-
+        t0 = B20; t1 = B21; t2 = B22; t3 = B23; t4 = B24;
         s20 = uint64Xor(t0, uint64And(uint64Not(t1), t2));
         s21 = uint64Xor(t1, uint64And(uint64Not(t2), t3));
         s22 = uint64Xor(t2, uint64And(uint64Not(t3), t4));
@@ -309,7 +235,35 @@ fn keccakF1600(state: ptr<function, array<u32, 200>>) {
         s24 = uint64Xor(t4, uint64And(uint64Not(t0), t1));
 
         // ι step
-        s0 = uint64Xor(s0, roundConstants[round]);
+        var roundConstant: uint64;
+        switch (round) {
+            case 0u: { roundConstant = uint64(0x00000001u, 0x00000000u); }
+            case 1u: { roundConstant = uint64(0x00008082u, 0x00000000u); }
+            case 2u: { roundConstant = uint64(0x0000808au, 0x80000000u); }
+            case 3u: { roundConstant = uint64(0x80008000u, 0x80000000u); }
+            case 4u: { roundConstant = uint64(0x0000808bu, 0x00000000u); }
+            case 5u: { roundConstant = uint64(0x80000001u, 0x00000000u); }
+            case 6u: { roundConstant = uint64(0x80008081u, 0x80000000u); }
+            case 7u: { roundConstant = uint64(0x00008009u, 0x80000000u); }
+            case 8u: { roundConstant = uint64(0x0000008au, 0x00000000u); }
+            case 9u: { roundConstant = uint64(0x00000088u, 0x00000000u); }
+            case 10u: { roundConstant = uint64(0x80008009u, 0x00000000u); }
+            case 11u: { roundConstant = uint64(0x8000000au, 0x00000000u); }
+            case 12u: { roundConstant = uint64(0x8000808bu, 0x00000000u); }
+            case 13u: { roundConstant = uint64(0x0000008bu, 0x80000000u); }
+            case 14u: { roundConstant = uint64(0x00008089u, 0x80000000u); }
+            case 15u: { roundConstant = uint64(0x00008003u, 0x80000000u); }
+            case 16u: { roundConstant = uint64(0x00008002u, 0x80000000u); }
+            case 17u: { roundConstant = uint64(0x00000080u, 0x80000000u); }
+            case 18u: { roundConstant = uint64(0x0000800au, 0x00000000u); }
+            case 19u: { roundConstant = uint64(0x8000000au, 0x80000000u); }
+            case 20u: { roundConstant = uint64(0x80008081u, 0x80000000u); }
+            case 21u: { roundConstant = uint64(0x00008080u, 0x80000000u); }
+            case 22u: { roundConstant = uint64(0x80000001u, 0x00000000u); }
+            case 23u: { roundConstant = uint64(0x80008008u, 0x80000000u); }
+            default: { roundConstant = uint64(0u, 0u); }
+        }
+        s0 = uint64Xor(s0, roundConstant);
     }
 
     uint64ToBytes(s0, state, 0u * 8u);
@@ -339,48 +293,61 @@ fn keccakF1600(state: ptr<function, array<u32, 200>>) {
     uint64ToBytes(s24, state, 24u * 8u);
 }
 
-fn keccak256_update(state: ptr<function, array<u32, 200>>, offset: u32, data: ptr<function, array<u32, 256>>, length: u32) -> u32 {
+fn keccak256Update(state: ptr<function, array<u32, 200>>, data: ptr<function, array<u32, 256>>, length: u32) -> array<u32, 32u> {
     let rate: u32 = 136u;
     var len: u32 = length;
     var doff: u32 = 0u;
-    var res = offset;
+    var offset: u32 = 0u;
     while (len > 0u) {
         var chunk: u32 = len;
-        if (len > (rate - res)) {
-            chunk = rate - res;
+        if (len > (rate - offset)) {
+            chunk = rate - offset;
         }
-        let off = res;
+        let t: u32 = offset;
         for (var i: u32 = 0u; i < chunk; i = i + 1u) {
-            (*state)[off + i] ^= (*data)[doff + i];
+            xorState(state, t + i, (*data)[doff + i]);
         }
-        res += chunk;
+        offset += chunk;
         doff += chunk;
         len -= chunk;
-        if (res == rate) {
+        if (offset == rate) {
             keccakF1600(state);
-            res = 0u;
+            offset = 0u;
         }
     }
-    return res;
-}
 
-fn keccak256_finalize(state: ptr<function, array<u32, 200>>, offset: u32) -> array<u32, 32u> {
-    let rate: u32 = 136u;
-    (*state)[offset] ^= 0x01u;
-    (*state)[rate - 1u] ^= 0x80u;
+    xorState(state, offset, 0x01u);
+    xorState(state, 135u, 0x80u);
     keccakF1600(state);
 
+    var s: slice = slice(
+        (*state)[0], (*state)[1], (*state)[2], (*state)[3],
+        (*state)[4], (*state)[5], (*state)[6], (*state)[7],
+        (*state)[8], (*state)[9], (*state)[10], (*state)[11],
+        (*state)[12], (*state)[13], (*state)[14], (*state)[15],
+        (*state)[16], (*state)[17], (*state)[18], (*state)[19],
+        (*state)[20], (*state)[21], (*state)[22], (*state)[23],
+        (*state)[24], (*state)[25], (*state)[26], (*state)[27],
+        (*state)[28], (*state)[29], (*state)[30], (*state)[31]
+    );
     var output: array<u32, 32u>;
-    for (var i: u32 = 0u; i < 32u; i = i + 1u) {
-        output[i] = (*state)[i];
-    }
+    output[0] = s.s0; output[1] = s.s1; output[2] = s.s2;
+    output[3] = s.s3; output[4] = s.s4; output[5] = s.s5;
+    output[6] = s.s6; output[7] = s.s7; output[8] = s.s8;
+    output[9] = s.s9; output[10] = s.s10; output[11] = s.s11;
+    output[12] = s.s12; output[13] = s.s13; output[14] = s.s14;
+    output[15] = s.s15; output[16] = s.s16; output[17] = s.s17;
+    output[18] = s.s18; output[19] = s.s19; output[20] = s.s20;
+    output[21] = s.s21; output[22] = s.s22; output[23] = s.s23;
+    output[24] = s.s24; output[25] = s.s25; output[26] = s.s26;
+    output[27] = s.s27; output[28] = s.s28; output[29] = s.s29;
+    output[30] = s.s30; output[31] = s.s31;
     return output;
 }
 
 fn keccak256(data: ptr<function, array<u32, 256>>, length: u32) -> array<u32, 32u> {
-    var ctx: Keccak256Context;
-    ctx.offset = keccak256_update(&ctx.state, ctx.offset, data, length);
-    return keccak256_finalize(&ctx.state, ctx.offset);
+    var<function> state: array<u32, 200>;
+    return keccak256Update(&state, data, length);
 }
 
 fn check(out: array<u32, 32>, diff: u32) -> bool {
