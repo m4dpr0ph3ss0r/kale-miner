@@ -175,16 +175,23 @@ async function invoke(method, data) {
             break;
     }
 
-    const account = await rpc.getAccount(data.farmer);
-    let transaction = new TransactionBuilder(account, { fee: fees.toString(), networkPassphrase: config.stellar?.networkPassphrase || Networks.PUBLIC })
+    const isLaunchTube = LaunchTube.isValid();
+    let transaction = new TransactionBuilder(await rpc.getAccount(data.farmer),
+        { fee: (isLaunchTube || !config.stellar?.fees) ? (await rpc.simulateTransaction(
+                new TransactionBuilder(await rpc.getAccount(data.farmer),
+                    { fee: fees.toString(), networkPassphrase: config.stellar?.networkPassphrase || Networks.PUBLIC })
         .addOperation(args)
         .setTimeout(300)
-        .build();
+        .build())).minResourceFee : fees, networkPassphrase: config.stellar?.networkPassphrase || Networks.PUBLIC })
+            .addOperation(args)
+            .setTimeout(300)
+            .build();
     transaction = await rpc.prepareTransaction(transaction);
     transaction.sign(Keypair.fromSecret(farmer.secret));
 
-    if (LaunchTube.isValid()) {
-        return await getResponse(await LaunchTube.send(transaction.toEnvelope().toXDR('base64'), fees), true);
+    if (isLaunchTube) {
+        return await getResponse(await LaunchTube.send(transaction.toEnvelope().toXDR('base64'),
+            config.stellar?.launchtube?.fees || transaction.fee), true);
     } else {
         return await getResponse(await rpc.sendTransaction(transaction));
     }
@@ -199,6 +206,23 @@ class LaunchTube {
     }
 
     static async send(xdr, fee) {
+        if (config.stellar.launchtube.checkCredits) {
+            const res = await fetch(config.stellar.launchtube.url + '/info', {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${config.stellar.launchtube.token}`,
+                }
+            });
+            if (!res.ok) {
+                throw new Error('Launchtube: Could not retrieve token info');
+            }
+            const credits = Number((await res.json())?.credits || 0);
+            if (credits < Number(fee)) {
+                throw new Error('Launchtube: No credits');
+            }
+            console.log(`Launchtube: ${credits / 10000000} XLM credits remaining`);
+        }
+
         const data = new FormData();
         data.append('xdr', xdr);
         data.append('fee', fee.toString());
