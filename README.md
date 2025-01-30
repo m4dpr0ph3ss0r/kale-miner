@@ -139,7 +139,9 @@ Open `homestead/config.json` to configure your server settings.
             "difficulty": 6,
             // Optional: Defines the minimum time (in seconds) before work is submitted
             // to the contract (default is 0 for immediate submission).
-            "minWorkTime": 0
+            "minWorkTime": 0,
+            // Optional: Set the miner to only harvest the previous block if work was submitted.
+            "harvestOnly": false
         }
     ],
     // Tune these settings according to your system’s performance.

@@ -17,7 +17,8 @@ const signers = config.farmers.reduce((acc, farmer) => {
         secret: farmer.secret,
         stake: farmer.stake || 0,
         difficulty: farmer.difficulty || 6,
-        minWorkTime: farmer.minWorkTime || 0
+        minWorkTime: farmer.minWorkTime || 0,
+        harvestOnly: farmer.harvestOnly || false
     };
     return acc;
 }, {});

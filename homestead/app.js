@@ -216,6 +216,9 @@ async function runFarm(interval) {
 
         // Plant ASAP to increase returns.
         for (const key in signers) {
+            if (signers[key].harvestOnly) {
+                continue;
+            }
             await plant(key, blockData, hasElapsed);
             if (hasElapsed) {
                 break;
@@ -233,6 +236,9 @@ async function runFarm(interval) {
 
         // Complete work.
         for (const key in signers) {
+            if (signers[key].harvestOnly) {
+                continue;
+            }
             if (hasElapsed) {
                 break;
             }

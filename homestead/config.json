@@ -6,7 +6,8 @@
             "secret": "SECRET...KEY",
             "stake": 0,
             "difficulty": 6,
-            "minWorkTime": 0
+            "minWorkTime": 0,
+            "harvestOnly": false
         }
     ],
     "miner": {
