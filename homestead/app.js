@@ -184,14 +184,13 @@ async function runFarm(interval) {
             continue;
         }
 
-        let elapsedTime, hasElapsed;
         const computeElapsed = () => {
             const now = BigInt(Math.floor(Date.now() / 1000));
-            elapsedTime = Number(now - BigInt(blockData.details?.timestamp || now));
-            hasElapsed = elapsedTime > 60 * 5 + 15;
+            return Number(now - BigInt(blockData.details?.timestamp || now));
         };
 
-        computeElapsed();
+        let elapsedTime = computeElapsed();
+        const hasElapsed = elapsedTime > 60 * 5 + 15;
         const changed = result.block !== blockData.block;
         if (changed || hasElapsed) {
             if (changed) {
@@ -218,7 +217,7 @@ async function runFarm(interval) {
                     delete signers[key].harvested;
                     delete signers[key].work;
                 }
-                computeElapsed();
+                elapsedTime = computeElapsed();
             }
         }
 
