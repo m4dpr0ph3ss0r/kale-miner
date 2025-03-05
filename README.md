@@ -161,7 +161,10 @@ Open `homestead/config.json` to configure your server settings.
         // For GPU mining, specify the device ID (default 0).
         "device": 0,
         // Enable real-time miner output.
-        "verbose": true
+        "verbose": true,
+        // Optional: Set ALL miners to only harvest the previous block if work was submitted.
+        // Overrides farmer settings if true.
+        "harvestOnly": false
     },
     "stellar": {
         // Stellar RPC URL, or use the environment variable RPC_URL.

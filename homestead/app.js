@@ -183,9 +183,16 @@ async function runFarm(interval) {
             await new Promise(resolve => setTimeout(resolve, interval));
             continue;
         }
+
+        let elapsedTime, hasElapsed;
+        const computeElapsed = () => {
+            const now = BigInt(Math.floor(Date.now() / 1000));
+            elapsedTime = Number(now - BigInt(blockData.details?.timestamp || now));
+            hasElapsed = elapsedTime > 60 * 5 + 15;
+        };
+
+        computeElapsed();
         const changed = result.block !== blockData.block;
-        const elapsedTime = Number(BigInt(Math.floor(Date.now() / 1000)) - BigInt(blockData.details?.timestamp || Math.floor(Date.now() / 1000)));
-        const hasElapsed = elapsedTime > 60 * 5 + 15;
         if (changed || hasElapsed) {
             if (changed) {
                 console.log(`New block detected ${result.block}`);
@@ -211,12 +218,15 @@ async function runFarm(interval) {
                     delete signers[key].harvested;
                     delete signers[key].work;
                 }
+                computeElapsed();
             }
         }
 
+        const { harvestOnly } = config.miner;
+
         // Plant ASAP to increase returns.
         for (const key in signers) {
-            if (signers[key].harvestOnly) {
+            if (harvestOnly || signers[key].harvestOnly) {
                 continue;
             }
             await plant(key, blockData, hasElapsed);
@@ -236,7 +246,7 @@ async function runFarm(interval) {
 
         // Complete work.
         for (const key in signers) {
-            if (signers[key].harvestOnly) {
+            if (harvestOnly || signers[key].harvestOnly) {
                 continue;
             }
             if (hasElapsed) {
