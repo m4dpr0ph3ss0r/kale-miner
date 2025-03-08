@@ -207,12 +207,16 @@ class LaunchTube {
     }
 
     static async send(xdr, fee) {
+        const headers = {
+            'Authorization': `Bearer ${config.stellar.launchtube.token}`,
+            'X-Client-Name': 'cpp-kale-miner',
+            'X-Client-Version': '1.0.0'
+        };
+
         if (config.stellar.launchtube.checkCredits) {
             const res = await fetch(config.stellar.launchtube.url + '/info', {
                 method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${config.stellar.launchtube.token}`,
-                }
+                headers
             });
             if (!res.ok) {
                 throw new Error('Launchtube: Could not retrieve token info');
@@ -230,9 +234,7 @@ class LaunchTube {
         data.append('sim', false);
         const res = await fetch(config.stellar.launchtube.url, {
             method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${config.stellar.launchtube.token}`,
-            },
+            headers,
             body: data
         });
         if (res.ok) {
