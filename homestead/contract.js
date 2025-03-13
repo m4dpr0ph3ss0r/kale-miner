@@ -33,7 +33,7 @@ const balances = {}
 const contractErrors = Object.freeze({
     1: 'HomesteadExists',
     2: 'HomesteadMissing',
-    3: 'AssetAdminInvalid',
+    3: 'FarmBlockMissing',
     4: 'FarmPaused',
     5: 'FarmNotPaused',
     6: 'PlantAmountTooLow',
@@ -190,63 +190,11 @@ async function invoke(method, data) {
             .setTimeout(300)
             .build();
     transaction = await rpc.prepareTransaction(transaction);
-
-    // HOTFIX for `invokeHostFunctionResourceLimitExceeded`.
-    // Ref: https://github.com/stellar/launchtube/blob/main/src/api/launch.ts#L216-L261
-    if (method === 'plant'
-        && config.stellar?.contract === 'CDL74RF5BLYR2YBLCCI7F5FB6TPSCLKEJUBSD2RSVWZ4YHF3VMFAIGWA'
-    ) {
-        let readBlockIndex = 0;
-        let isNewBlock = false;
-        const resources = transactionData.build().resources();
-
-        // Determine whether read footprint is missing Block.
-        for (let entry of resources.footprint().readOnly()) {
-            try {
-                const key = scValToNative(entry.contractData().key());
-                if (key?.[0] === 'Block') {
-                    readBlockIndex = key[1];
-                    break;
-                }
-            } catch { }
-        }
-
-        // Determine whether write footprint block index is different
-        // from the read block index.
-        for (let entry of resources.footprint().readWrite()) {
-            try {
-                const key = scValToNative(entry.contractData().key());
-                if (
-                    key?.[0] === 'Block'
-                    && key[1] !== readBlockIndex
-                ) {
-                    isNewBlock = true;
-                    break;
-                }
-            } catch { }
-        }
-
-        // Adjust read bytes.
-        if (isNewBlock) {
-            transactionData.setResources(
-                resources.instructions(),
-                resources.readBytes() + 460,
-                resources.writeBytes()
-            )
-        }
-
-        const sorobanData = transactionData.build();
-        transaction = TransactionBuilder
-            .cloneFrom(transaction, {
-                fee: isLaunchTube ? sorobanData.resourceFee().toString() : transaction.fee,
-                sorobanData
-            }).build();
-        if (config.stellar?.debug) {
-            console.log(transaction.toEnvelope().toXDR('base64'));
-        }
-    }
-
     transaction.sign(Keypair.fromSecret(farmer.secret));
+
+    if (config.stellar?.debug) {
+        console.log(transaction.toEnvelope().toXDR('base64'));
+    }
 
     if (isLaunchTube) {
         return await getResponse(await LaunchTube.send(transaction.toEnvelope().toXDR('base64'),
