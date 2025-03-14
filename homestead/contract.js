@@ -44,7 +44,8 @@ const contractErrors = Object.freeze({
     11: 'BlockMissing',
     12: 'BlockInvalid',
     13: 'HashInvalid',
-    14: 'HarvestNotReady'
+    14: 'HarvestNotReady',
+    15: 'GapCountTooLow'
 });
 
 const getError = (error) => {
