@@ -10,6 +10,13 @@
             "harvestOnly": false
         }
     ],
+    "harvester": {
+        "account" : "SECRET...KEY",
+        "delay": 60,
+        "range": "-1",
+        "harvestOnly": false,
+        "retryCount": 3
+    },
     "miner": {
         "executable": "../miner",
         "difficulty": 6,

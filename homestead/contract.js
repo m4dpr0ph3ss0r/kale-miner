@@ -18,7 +18,8 @@ const signers = config.farmers.reduce((acc, farmer) => {
         stake: farmer.stake || 0,
         difficulty: farmer.difficulty || 6,
         minWorkTime: farmer.minWorkTime || 0,
-        harvestOnly: farmer.harvestOnly || false
+        harvestOnly: farmer.harvestOnly || false,
+        stats: { fees: 0, amount: 0 }
     };
     return acc;
 }, {});
@@ -29,6 +30,7 @@ const blockData = {
 };
 
 const balances = {}
+const session = { log: [] };
 
 const contractErrors = Object.freeze({
     1: 'HomesteadExists',
@@ -55,7 +57,14 @@ const getError = (error) => {
             ? (JSON.stringify(error) || error.toString())
             : String(error)))
                 .match(/Error\(Contract, #(\d+)\)/)?.[1] || 0, 10)] || msg; 
-}
+};
+
+const getReturnValue = (resultMetaXdr) => {
+    const txMeta = LaunchTube.isValid()
+        ? xdr.TransactionMeta.fromXDR(resultMetaXdr, "base64")
+        : xdr.TransactionMeta.fromXDR(resultMetaXdr.toXDR().toString("base64"), "base64");
+    return txMeta.v3().sorobanMeta().returnValue();
+};
 
 async function getInstanceData() {
     const result = {};
@@ -149,6 +158,7 @@ async function getResponse(response, launchTube) {
     if (config.stellar?.debug) {
         console.log(response);
     }
+    response.feeCharged = (response.feeCharged || response.resultXdr?._attributes?.feeCharged || 0).toString();
     return response;
 }
 
@@ -159,43 +169,50 @@ async function invoke(method, data) {
         return null;
     }
 
-    let args;
+    let args, source, params;
     const contract = new Contract(contractId);
     switch (method) {
         case 'plant':
             args = contract.call('plant', new Address(data.farmer).toScVal(),
                 nativeToScVal(data.amount, { type: 'i128' }));
+            params = `with ${(data.amount / 10000000).toFixed(7)} KALE`;
             break;
         case 'work':
             args = contract.call('work', new Address(data.farmer).toScVal(), xdr.ScVal.scvBytes(Buffer.from(data.hash, 'hex')),
                 nativeToScVal(data.nonce, { type: 'u64' }));
+            params = `with ${data.hash}/${data.nonce}`;
             break;
         case 'harvest':
+            source = StrKey.isValidEd25519SecretSeed(config.harvester?.account) ? Keypair.fromSecret(config.harvester?.account) : null;
             await setupAsset(data.farmer);
             args = contract.call('harvest', new Address(data.farmer).toScVal(),
-                nativeToScVal(data.block, { type: 'u32' }))
+                nativeToScVal(data.block, { type: 'u32' }));
+            params = `for block ${data.block}`;
             break;
     }
 
     const isLaunchTube = LaunchTube.isValid();
-    const {minResourceFee, transactionData } = (await rpc.simulateTransaction(
-                new TransactionBuilder(await rpc.getAccount(data.farmer),
+    const { minResourceFee } = (await rpc.simulateTransaction(
+                new TransactionBuilder(await rpc.getAccount(source?.publicKey() || data.farmer),
                     { fee: fees.toString(), networkPassphrase: config.stellar?.networkPassphrase || Networks.PUBLIC })
         .addOperation(args)
         .setTimeout(300)
         .build()));
 
-    let transaction = new TransactionBuilder(await rpc.getAccount(data.farmer),
+    let transaction = new TransactionBuilder(await rpc.getAccount(source?.publicKey() || data.farmer),
         { fee: (isLaunchTube || !config.stellar?.fees) ? minResourceFee : fees, networkPassphrase: config.stellar?.networkPassphrase || Networks.PUBLIC })
             .addOperation(args)
             .setTimeout(300)
             .build();
     transaction = await rpc.prepareTransaction(transaction);
-    transaction.sign(Keypair.fromSecret(farmer.secret));
+    transaction.sign(Keypair.fromSecret(source?.secret() || farmer.secret));
 
     if (config.stellar?.debug) {
         console.log(transaction.toEnvelope().toXDR('base64'));
     }
+
+    session.log.push({ stamp: Date.now(), msg: `Farmer ${data.farmer.slice(0, 4)}..${data.farmer.slice(-6)} invoked '${method}' ${params}`});
+    session.log = session.log.slice(-50);
 
     if (isLaunchTube) {
         return await getResponse(await LaunchTube.send(transaction.toEnvelope().toXDR('base64'),
@@ -220,6 +237,7 @@ class LaunchTube {
             'X-Client-Version': '1.0.0'
         };
 
+        session.launchTube = true;
         if (config.stellar.launchtube.checkCredits) {
             const res = await fetch(config.stellar.launchtube.url + '/info', {
                 method: 'GET',
@@ -232,7 +250,8 @@ class LaunchTube {
             if (credits < Number(fee)) {
                 throw new Error('Launchtube: No credits');
             }
-            console.log(`Launchtube: ${credits / 10000000} XLM credits remaining`);
+            session.credits = credits / 10000000;
+            console.log(`Launchtube: ${session.credits} XLM credits remaining`);
         }
 
         const data = new FormData();
@@ -254,4 +273,4 @@ class LaunchTube {
     }
 }
 
-module.exports = { getInstanceData, getTemporaryData, getPail, getError, invoke, LaunchTube, rpc, horizon, contractId, contractErrors, signers, blockData, balances };
+module.exports = { getInstanceData, getTemporaryData, getPail, getError, getReturnValue, invoke, LaunchTube, rpc, horizon, contractId, contractErrors, signers, blockData, balances, session };

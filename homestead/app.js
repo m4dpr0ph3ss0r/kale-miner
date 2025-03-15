@@ -5,13 +5,14 @@
 
 const express = require('express');
 const cors = require('cors');
-const { xdr, nativeToScVal, scValToNative } = require('@stellar/stellar-sdk');
+const { xdr, StrKey, nativeToScVal, scValToNative } = require('@stellar/stellar-sdk');
 const { spawn } = require('child_process');
 const path = require('path');
 const routes = require('./routes');
 const config = require(process.env.CONFIG || './config.json');
 const strategy = require('./strategy.js');
-const { signers, blockData, invoke, getError, getInstanceData, getTemporaryData, getPail, LaunchTube } = require('./contract');
+const { signers, blockData, session, invoke, getError, getReturnValue, getInstanceData, getTemporaryData, getPail } = require('./contract');
+const { Harvester, parseRange } = require('./harvester');
 const app = express();
 const PORT = process.env.PORT || 3002;
 const pollInterval = 5 * 1000;
@@ -28,13 +29,6 @@ const FarmerStatus = Object.freeze({
 const deepCopy = obj => JSON.parse(JSON.stringify(obj,
     (_key, value) => typeof value === 'bigint' ? value.toString() : value));
 
-function getReturnValue(resultMetaXdr) {
-    const txMeta = LaunchTube.isValid()
-        ? xdr.TransactionMeta.fromXDR(resultMetaXdr, "base64")
-        : xdr.TransactionMeta.fromXDR(resultMetaXdr.toXDR().toString("base64"), "base64");
-    return txMeta.v3().sorobanMeta().returnValue(); 
-}
-
 async function plant(key, blockData, next) {
     const data = deepCopy(blockData);
     data.block = data.block + (next ? 1 : 0);
@@ -49,35 +43,15 @@ async function plant(key, blockData, next) {
             if (response.status !== 'SUCCESS') {
                 throw new Error(`tx Failed: ${response.hash}`);
             }
+            signers[key].stats.fees += Number(response.feeCharged || 0);
+            signers[key].stats.stake = Number(amount) / 10000000;
+            signers[key].stats.stakeBlock = blockData.block;
             console.log(`Farmer ${key} planted ${blockData.block} with ${Number(amount) / 10000000} KALE`);
         }
     } catch(err) {
         const error = getError(err);
         console.error(`Farmer ${key} could not plant ${data.block} (next: ${next}): ${error}`);
         await new Promise(resolve => setTimeout(resolve, pollInterval));
-    }
-}
-
-async function harvest(key, block) {
-    if (signers[key].harvested) {
-        return;
-    }
-    signers[key].harvested = true;
-    const status = await getPail(key, block);
-    if (status?.zeros && status?.sequence) {
-        try {
-            const response = await invoke('harvest', { farmer: key, block });
-            if (response.status !== 'SUCCESS') {
-                throw new Error(`tx Failed: ${response.hash}`);
-            }
-            const value = Number(scValToNative(getReturnValue(response.resultMetaXdr)) || 0);
-            console.log(`Farmer ${key} harvested block ${block} for ${value / 10000000} KALE`);
-        } catch(err) {
-            const error = getError(err);
-            console.error(`Farmer ${key} could not harvest block ${block}: ${error}`);
-            signers[key].harvested = false;
-            await new Promise(resolve => setTimeout(resolve, pollInterval));
-        }
     }
 }
 
@@ -116,6 +90,8 @@ async function work(mining, key, blockData) {
                 throw new Error(`tx Failed: ${response.hash}`);
             }
             const value = Number(scValToNative(getReturnValue(response.resultMetaXdr)) || 0);
+            signers[key].stats.fees += Number(response.feeCharged || 0);
+            signers[key].stats.workGap = value;
             console.log(`Farmer ${key} submitted work [hash: ${signers[key].work.hash}, nonce: ${signers[key].work.nonce}, gap: ${value}] for ${blockData.block}`);
         } catch(err) {
             delete signers[key].work;
@@ -137,6 +113,8 @@ async function mine(minerExec, block, hash, nonce, difficulty, key, maxThreads, 
         if (gpu) args.push('--gpu');
         if (verbose) args.push('--verbose');
 
+        session.gpu = gpu;
+
         console.log(`Farmer ${key} process started with command: ${args}\n====MINING JOB=====\n`);
         let output = '';
         const miner = path.resolve(minerExec);
@@ -147,6 +125,9 @@ async function mine(minerExec, block, hash, nonce, difficulty, key, maxThreads, 
                 if (line.trim()) {
                     console.log(line);
                     output += line + '\n';
+                    if (/Hash Rate/.test(line)) {
+                        session.hashrate = line.match(/([\d.]+\s*[KMGT]?H\/s)/)?.[1] || '';
+                    }
                 }
             });
         });
@@ -176,7 +157,14 @@ async function mine(minerExec, block, hash, nonce, difficulty, key, maxThreads, 
 }
 
 async function runFarm(interval) {
+    session.time = Date.now();
+    const hasHarvester = StrKey.isValidEd25519SecretSeed(config.harvester?.account);
+    if (hasHarvester) {
+        Harvester.run();
+    }
+
     let count = 0;
+    let harvested = false;
     while (true) {
         const result = await getInstanceData();
         if (!result?.block) {
@@ -198,7 +186,7 @@ async function runFarm(interval) {
                 blockData.block = result.block;
                 delete blockData.hash;
                 const tmpData = await getTemporaryData(xdr.ScVal.scvVec([xdr.ScVal.scvSymbol("Block"),
-                    nativeToScVal(Number(blockData.block), { type: "u32" })]));
+                nativeToScVal(Number(blockData.block), { type: "u32" })]));
                 if (tmpData) {
                     blockData.hash = Buffer.from(tmpData.entropy).toString('base64');
                     delete tmpData.entropy;
@@ -214,14 +202,34 @@ async function runFarm(interval) {
                 for (const key in signers) {
                     console.log(`Farmer ${key} is READY`);
                     signers[key].status = FarmerStatus.PLANTING;
-                    delete signers[key].harvested;
                     delete signers[key].work;
                 }
                 elapsedTime = computeElapsed();
             }
         }
 
-        const { harvestOnly } = config.miner;
+        if (!harvested && config.harvester?.range) {
+            harvested = true;
+            const { range, count } = parseRange(config.harvester.range);
+            for (const key in signers) {
+                if (range) {
+                    const [start, end] = range;
+                    for (let block = end; block >= start; block--) {
+                        console.log(`Farmer ${key} checking block ${block} for harvest`);
+                        Harvester.add(key, block, Date.now());
+                    }
+                } else if (count) {
+                    for (let i = 1; i <= count; i++) {
+                        console.log(`Farmer ${key} checking block ${blockData.block - 1 - i} for harvest`);
+                        Harvester.add(key, blockData.block - 1 - i, Date.now());
+                    }
+                }
+            }
+            await Harvester.flush();
+            continue;
+        }
+
+        const { harvestOnly } = config.harvester;
 
         // Plant ASAP to increase returns.
         for (const key in signers) {
@@ -235,12 +243,15 @@ async function runFarm(interval) {
             await updateStatus(key, blockData.block);
         }
 
-        // Harvest previous block.
+        // Harvest prev block.
+        const harvestTime = ((isNaN(config.harvester?.delay) || !hasHarvester)
+            ? 0 : Date.now() + config.harvester.delay * 1000 + Math.floor(Math.random() * 20000));
         for (const key in signers) {
-            if (hasElapsed) {
-                break;
-            }
-            await harvest(key, blockData.block - 1);
+            Harvester.add(key, blockData.block - 1, harvestTime);
+        }
+
+        if (!hasHarvester) {
+            await Harvester.flush();
         }
 
         // Complete work.
@@ -256,7 +267,9 @@ async function runFarm(interval) {
             const minWorkTime = isNaN(value) ? 0 : value;
             if (await work(true, key, blockData)) {
                 const timeLeft = minWorkTime - elapsedTime;
-                console.log(`Farmer ${key} submitting work ${timeLeft <= 0 ? 'immediately' : `later (minimum time: ${timeLeft.toFixed(0)} sec)`}`); 
+                console.log(`Farmer ${key} submitting work ${timeLeft <= 0 ? 'immediately' : `later (minimum time: ${timeLeft.toFixed(0)} sec)`}`);
+                signers[key].stats.workTime = Date.now() + Math.max(0, timeLeft * 1000);
+                signers[key].stats.workBlock = blockData.block;
             }
             if (minWorkTime <= elapsedTime) {
                 await work(false, key, blockData);

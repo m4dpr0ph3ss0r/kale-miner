@@ -4,9 +4,35 @@
  */
 
 const express = require('express');
-const { invoke, blockData, balances } = require('./contract');
+const { invoke, blockData, balances, signers, session } = require('./contract');
 const router = express.Router();
 const path = require('path');
+
+const convert = (obj) => {
+    if (typeof obj === 'bigint') {
+        return obj.toString();
+    } else if (Array.isArray(obj)) {
+        return obj.map(convert);
+    } else if (obj && typeof obj === 'object') {
+        return Object.fromEntries(
+            Object.entries(obj).map(([key, value]) => [key, convert(value)])
+        );
+    }
+    return obj;
+}
+
+router.get('/monitor', async (req, res) => {
+    try {
+        res.json({
+            block: convert(blockData),
+            session,
+            balances,
+            farmers: Object.fromEntries(Object.entries(signers).map(([key, value]) => [key, (({ secret, ...rest }) => rest)(value)]))
+        });
+    } catch (error) {
+        res.status(500).send(error.message);
+    }
+});
 
 router.get('/plant', async (req, res) => {
     const { farmer, amount } = req.query;
@@ -36,18 +62,6 @@ router.get('/harvest', async (req, res) => {
 });
 
 router.get('/data', async (req, res) => {
-    const convert = (obj) => {
-        if (typeof obj === 'bigint') {
-            return obj.toString();
-        } else if (Array.isArray(obj)) {
-            return obj.map(convert);
-        } else if (obj && typeof obj === 'object') {
-            return Object.fromEntries(
-                Object.entries(obj).map(([key, value]) => [key, convert(value)])
-            );
-        }
-        return obj;
-    }
     res.json(convert(blockData));
 });
 

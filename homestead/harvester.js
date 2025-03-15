@@ -1,0 +1,80 @@
+/*!
+ * This file is part of kale-miner.
+ * Author: Fred Kyung-jin Rezeau <fred@litemint.com>
+ */
+
+const { scValToNative } = require('@stellar/stellar-sdk');
+const { invoke, getError, getReturnValue, getPail, signers } = require('./contract');
+const config = require(process.env.CONFIG || './config.json');
+
+const retryInterval = 10 * 1000;
+
+function parseRange(input) {
+    if (/^\d+-\d+$/.test(input)) {
+        return { range: input.split('-').map(Number) };
+    } else if (/^-\d+$/.test(input)) {
+        return { count: Number(input.slice(1)) };
+    }
+    return {};
+}
+
+class Harvester {
+    static queue = [];
+
+    static add(farmer, block, time, retry) {
+        retry = retry || config.harvester?.retryCount;
+        this.queue.push({ farmer, block, time, retry });
+        this.queue.sort((a, b) => a.time - b.time);
+    }
+
+    static async harvest(data) {
+        const { farmer, block, retry } = data;
+        const status = await getPail(farmer, block);
+        if (status?.zeros && status?.sequence) {
+            try {
+                const response = await invoke('harvest', { farmer, block });
+                if (response.status !== 'SUCCESS') {
+                    throw new Error(`tx Failed: ${response.hash}`);
+                }
+                const value = Number(scValToNative(getReturnValue(response.resultMetaXdr)) || 0);
+                signers[farmer].stats.fees += Number(response.feeCharged || 0);
+                signers[farmer].stats.amount += value / 10000000;
+                signers[farmer].stats.lastAmount = value / 10000000;
+                signers[farmer].stats.lastBlock = block;
+                console.log(`Farmer ${farmer} harvested block ${block} for ${value / 10000000} KALE`);
+            } catch (err) {
+                const error = getError(err);
+                console.error(`Farmer ${farmer} could not harvest block ${block}: ${error}. Retry count: ${retry || 0}.`);
+                if (!isNaN(retry)) {
+                    data.retry -= 1;
+                    setTimeout(() => {
+                        this.add(farmer, block, Date.now() + retryInterval, data.retry);
+                    }, 10);
+                }
+            }
+        }
+    }
+
+    static async flush() {
+        while (this.queue.length > 0) {
+            const now = Date.now();
+            const next = this.queue[0];
+            if (next.time > now) {
+                await new Promise(resolve => setTimeout(resolve, next.time - now));
+            }
+            await this.harvest(this.queue.shift());
+        }
+    }
+
+    static run() {
+        const process = async () => {
+            while (this.queue.length && this.queue[0].time <= Date.now()) {
+                await this.harvest(this.queue.shift());
+            }
+            setTimeout(process, 1000);
+        };
+        process();
+    }
+}
+
+module.exports = { Harvester, parseRange };

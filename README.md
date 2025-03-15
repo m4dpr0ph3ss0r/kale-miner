@@ -144,6 +144,21 @@ Open `homestead/config.json` to configure your server settings.
             "harvestOnly": false
         }
     ],
+    "harvester": {
+        // Optional: Secret key for the harvester account.
+        "account" : "SECRET...KEY",
+        // Optional: Harvesting delay, recommended to avoid failures due to network congestion.
+        "delay": 60,
+        // Optional: String representing a block range to check for harvest at startup.
+        // - absolute range: "start-end" (e.g., "10-15" to check blocks 10 through 15)
+        // - relative range: "-count" (e.g., "-5" to check 5 blocks from the penultimate block)
+        "range": "-1",
+        // Optional: Set ALL miners to only harvest the previous block if work was submitted.
+        // Overrides farmer settings if true.
+        "harvestOnly": false,
+        // Optional: Specifies the number of retry for failed harvest due to contract error.
+        "retryCount": 3
+    },
     // Tune these settings according to your system’s performance.
     "miner": {
         "executable": "../miner",
@@ -161,10 +176,7 @@ Open `homestead/config.json` to configure your server settings.
         // For GPU mining, specify the device ID (default 0).
         "device": 0,
         // Enable real-time miner output.
-        "verbose": true,
-        // Optional: Set ALL miners to only harvest the previous block if work was submitted.
-        // Overrides farmer settings if true.
-        "harvestOnly": false
+        "verbose": true
     },
     "stellar": {
         // Stellar RPC URL, or use the environment variable RPC_URL.
@@ -195,6 +207,18 @@ Then run the following commands to start the server:
 cd homestead
 npm install
 PORT=3001 RPC_URL="https://your-rpc-url" npm start
+```
+
+### Crop Monitor: Track Your Harvest in Real Time
+
+Keep an eye on your harvest and farmers' activity in real time with the **Crop Monitor**.
+
+Follow these steps to get it up and running (ensure you adjust the `PORT` to match your homestead server configuration):
+
+```bash
+cd cropmonitor
+npm install
+PORT=3001 npm start
 ```
 
 ### Dynamic Farming Strategy (Advanced Users)
