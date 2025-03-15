@@ -213,7 +213,11 @@ PORT=3001 RPC_URL="https://your-rpc-url" npm start
 
 Keep an eye on your harvest and farmers' activity in real time with the **Crop Monitor**.
 
-Follow these steps to get it up and running (ensure you adjust the `PORT` to match your homestead server configuration):
+Follow these steps to get it up and running:
+
+- Make sure the `PORT` matches your homestead server configuration.
+- Enable `miner.verbose` (set to `true`) in `config.json` to view the hash rate estimate.
+- Enable `stellar.launchtube.checkCredits` (set to `true`) in `config.json` to display the Launchtube credits.
 
 ```bash
 cd cropmonitor
