@@ -16,7 +16,7 @@ const signers = config.farmers.reduce((acc, farmer) => {
     acc[publicKey] = {
         secret: farmer.secret,
         stake: farmer.stake || 0,
-        difficulty: farmer.difficulty || 6,
+        difficulty: farmer.difficulty,
         minWorkTime: farmer.minWorkTime || 0,
         harvestOnly: farmer.harvestOnly || false,
         stats: { fees: 0, amount: 0 }
