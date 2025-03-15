@@ -5,7 +5,7 @@ ifneq ($(OS),Windows_NT)
     CXX = g++
     NVCC = nvcc
 
-    COMMON_FLAGS = -O3 -DNDEBUG -ffast-math -funroll-loops -fopenmp -pthread -std=c++17 -Iutils
+    COMMON_FLAGS = -O3 -DNDEBUG -ffast-math -funroll-loops -pthread -std=c++17 -Iutils
     GXX_FLAGS = $(COMMON_FLAGS) -march=native -flto
     NVCC_FLAGS = $(COMMON_FLAGS)
 
