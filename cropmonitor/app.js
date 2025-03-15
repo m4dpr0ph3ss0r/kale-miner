@@ -169,7 +169,7 @@ function renderSystemTable(system) {
             pad(String(system.gpu || '-').toUpperCase()),
             pad(String(system.hashrate || '-')),
             pad(String(system.earnRate || '-')),
-            ` ${system.credits ? String(Number(system.credits / 10 / 7).toFixed(3) || 'N/A') : 'N/A'} XLM`
+            ` ${system.credits ? String(Number(system.credits).toFixed(3) || 'N/A') : 'N/A'} XLM`
         ])
     }
     systemTable.setData(data);
