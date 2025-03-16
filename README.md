@@ -1,5 +1,9 @@
 # kale-miner
 
+![Kale Miner Tools](./kale-miner.png)
+
+> **In a rush?** Watch this [Youtube Video Tutorial](https://www.youtube.com/watch?v=yaiEX62P4BA) to compile and run the C++ CPU/GPU Miner, and start farming KALE in less than 10 minutes!
+
 ## CPU/GPU Miner for KALE
 
 `kale-miner` is a CPU/GPU miner written in C++ for [KALE](https://stellar.expert/explorer/public/contract/CB23WRDQWGSP6YPMY4UV5C4OW5CBTXKYN3XEATG7KJEZCXMJBYEHOUOV) on the [Stellar](https://stellar.org/) blockchain. It supports **CPU parallel processing**, and **GPU acceleration with CUDA or OpenCL**.
@@ -7,6 +11,7 @@
 Learn more about KALE:
 - [The KALEpail Project](https://github.com/kalepail/KALE-sc) by [kalepail](https://github.com/kalepail)
 - [KALE Fan Fiction Lore](https://kalepail.com/kale/kale-chapter-1) by [briwylde08](https://github.com/briwylde08)
+- Join [Stellar Global](https://discord.gg/GQhjwBGrJG) Discord.
 
 ## Performance
 
