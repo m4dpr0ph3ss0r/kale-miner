@@ -7,6 +7,8 @@ const blessed = require('blessed');
 const axios = require('axios');
 const PORT = process.env.PORT || 3002;
 
+const cache = {};
+
 const screen = blessed.screen({
     smartCSR: true,
     autoPadding: true,
@@ -80,13 +82,36 @@ const logBox = blessed.log({
     style: { fg: 'yellow' }
 });
 
+const statusBox = blessed.box({
+    border: { type: 'line', fg: 'cyan' },
+    align: 'center',
+    tags: true,
+    scrollable: false,
+    keys: false,
+    mouse: false,
+    style: { fg: 'cyan' }
+});
+
+const tipBox = blessed.box({
+    border: { type: 'line', fg: 'black' },
+    align: 'right',
+    tags: true,
+    scrollable: false,
+    keys: false,
+    mouse: false,
+    style: { fg: 'gray' }
+});
+
+
 function recalcLayout() {
     const layouts = [
         { element: blockTable, props: { top: 1, left: '50%+1', width: '50%-3', height: 4 } },
         { element: harvestTable, props: { top: 1, left: 1, width: '50%-1', height: 4 } },
         { element: systemTable, props: { top: 5, left: 1, width: '100%-4', height: 4 } },
         { element: farmersTable, props: { top: 9, left: 1, width: '100%-4', height: '30%' } },
-        { element: logBox, props: { bottom: 1, left: 1, width: '100%-4', height: 9 } }
+        { element: logBox, props: { bottom: 4, left: 1, width: '100%-4', height: 7 } },
+        { element: statusBox, props: { bottom: 1, left: 1, width: '70%-1', height: 3 } },
+        { element: tipBox, props: { bottom: 1, left: '70%+1', width: '30%-3', height: 3 } }
     ];
     layouts.forEach(({ element, props }) => {
         Object.assign(element, props);
@@ -94,16 +119,23 @@ function recalcLayout() {
     screen.render();
 }
 
+let farmerDetailsMode = false;
+
 screen.on('resize', () => {
     recalcLayout();
 });
 screen.key(['escape', 'q', 'C-c'], () => process.exit(0));
-
+screen.key(['f2'], () => {
+    farmerDetailsMode = !farmerDetailsMode;
+    updateData(true);
+});
 screen.append(harvestTable);
 screen.append(blockTable);
 screen.append(systemTable);
 screen.append(farmersTable);
 screen.append(logBox);
+screen.append(statusBox);
+screen.append(tipBox);
 
 const log = new Set();
 const pad = str => ` ${str}`;
@@ -113,18 +145,28 @@ const formatSessionTime = (time) => {
 };
 
 function renderFarmersTable(farmers) {
-    const data = [
-        [pad('Farmer'), pad('Balance'), pad('Status'), pad('Block/Stake (Last)'), pad('Block/Gap/Harvest (Last)'), pad('Total Harvest'), pad('Total Fee')],
+    const data = farmerDetailsMode ? [
+        [pad('Farmer'), pad('Native Balance'), pad('Harvest (Min/Max/Avg)'), pad('Fee (Min/Max/Avg)'), pad('Gap (Min/Max/Avg)')],
+    ] : [
+        [pad('Farmer'), pad('Balance'), pad('Status'), pad('Block/Stake (Last)'), pad('Block/Harvest (Last)'), pad('Gap/Zeros'), pad('Total Harvest'), pad('Total Fee')],
     ];
-    farmers.forEach(farmer => {
-        data.push([
+    farmers?.forEach(farmer => {
+        data.push(!farmerDetailsMode ? [
             pad(String(farmer.address)),
             pad(String(farmer.balance)),
             pad(String(farmer.status)),
             pad(String(farmer.stake)),
             pad(String(farmer.harvest)),
+            pad(String(farmer.gapzeros)),
             pad(String(farmer.total)),
             pad(String(farmer.fees))
+        ] :
+        [
+            pad(String(farmer.address)),
+            pad(String(farmer.nativeBalance)),
+            pad(String(farmer.harvestStats)),
+            pad(String(farmer.feeStats)),
+            pad(String(farmer.gapStats))
         ]);
     });
     farmersTable.setData(data);
@@ -166,18 +208,19 @@ function renderSystemTable(system) {
     ];
     if (system) {
         data.push([
-            pad(String(system.gpu || '-').toUpperCase()),
+            pad(String(system.gpu ?? '-').toUpperCase()),
             pad(String(system.hashrate || '-')),
             pad(String(system.earnRate || '-')),
-            ` ${system.credits ? String(Number(system.credits).toFixed(3) || 'N/A') : 'N/A'} XLM`
+            pad(system?.launchTube === false ? 'FALSE' : `${system?.launchTube && system.credits ? String(Number(system.credits).toFixed(3) || '-') : '-'} ${system?.launchTube && system.credits ? 'XLM' : ''}`)
         ])
     }
     systemTable.setData(data);
 }
 
-async function updateData() {
+async function updateData(useCache) {
     try {
-        const response = await axios.get(`http://localhost:${PORT}/monitor`);
+        const response = useCache ? cache.response : await axios.get(`http://localhost:${PORT}/monitor`);
+        cache.response = response;
         const { farmers, balances, session, block } = response.data;
         const getStatus = (status) => {
             const statuses = {
@@ -187,16 +230,32 @@ async function updateData() {
             };
             return statuses[status];
         };
-
-        const accounts = Object.entries(farmers).map(([key, value]) => ({
-            address: `${key.slice(0, 4)}..${key.slice(-6)}`,
-            balance: balances[key]?.KALE ? `${Number(balances[key]?.KALE).toFixed(3)} KALE` : '- KALE',
-            status: getStatus(value.status),
-            stake: `${value.stats?.stakeBlock || '-'}/${value.stats?.stake?.toFixed(3) || '-'} KALE`,
-            harvest: `${value.stats?.lastBlock || '-'}/${value.stats?.workGap || '-'}/${value.stats?.lastAmount?.toFixed(3) || '-'} KALE`,
-            total: `${(value.stats?.amount || 0).toFixed(3)} KALE`,
-            fees: `${((value.stats?.fees || 0) / 10000000).toFixed(3)} XLM`
-        }));
+        
+        const accounts = Object.entries(farmers).map(([key, value]) => {
+            const avgHarvest = value.stats.amount / value.stats.harvestCount;
+            const avgFee = value.stats.fees / value.stats.feeCount;
+            const avgGap = value.stats.gaps / value.stats.workCount;
+            return ({
+                address: `${key.slice(0, 4)}..${key.slice(-6)}`,
+                balance: balances[key]?.KALE ? `${Number(balances[key]?.KALE).toFixed(3)} KALE` : '-',
+                nativeBalance: balances[key]?.XLM ? `${Number(balances[key]?.XLM).toFixed(3)} XLM` : '-',
+                harvestStats: value.stats.minAmount && value.stats.maxAmount
+                    ? `${Number(value.stats.minAmount).toFixed(3)}/${Number(value.stats.maxAmount).toFixed(3)}/${Number(avgHarvest).toFixed(3)} KALE`
+                    : '-',
+                feeStats: value.stats.minFee && value.stats.maxFee
+                    ? `${Number(value.stats.minFee / 10000000).toFixed(4)}/${Number(value.stats.maxFee / 10000000).toFixed(4)}/${Number(avgFee / 10000000).toFixed(4)} XLM`
+                    : '-',
+                gapStats: value.stats.minGap && value.stats.maxGap
+                ? `${Number(value.stats.minGap)}/${Number(value.stats.maxGap)}/${Number(avgGap).toFixed(1)}`
+                : '-',
+                status: getStatus(value.status),
+                stake: `${value.stats?.stakeBlock || '-'}/${value.stats?.stake?.toFixed(3) || '-'} ${ value.stats?.stakeBlock ? 'KALE' : ''}`,
+                gapzeros: value.stats?.lastBlock ? `${value.stats?.workGap || '-'}/${value.stats?.lastDiff || '-'}` : '-/-',
+                harvest: `${value.stats?.lastBlock || '-'}/${value.stats?.lastAmount?.toFixed(3) || '-'} ${ value.stats?.lastBlock ? 'KALE' : ''}`,
+                total: `${(value.stats?.amount || 0).toFixed(3)} KALE`,
+                fees: `${((value.stats?.fees || 0) / 10000000).toFixed(3)} XLM`
+            });
+        });
 
         const totals = Object.values(farmers).reduce(
             (acc, farmer) => {
@@ -230,12 +289,30 @@ async function updateData() {
             }
         }
 
+        const status = !Object.keys(balances).length
+        || !block?.details
+        || !Object.keys(farmers).length
+        || session.gpu === undefined
+        || session.launchTube === undefined
+        || !session.hashrate
+            ? 'Awaiting harvest data...'
+            : 'Ready - processing data';
+
+        statusBox.setContent(status);
+        tipBox.setContent(`F2: toggle additional stats `);
+
         renderFarmersTable(accounts);
         renderHarvestTable(totals);
         renderBlockTable(blockData);
         renderSystemTable(session);
         recalcLayout();
     } catch (error) {
+        renderFarmersTable();
+        renderHarvestTable();
+        renderBlockTable();
+        renderSystemTable();
+        recalcLayout();
+        statusBox.setContent('Homestead connection lost...');
         logBox.log(`Error fetching data ${error.message}`);
     }
 }

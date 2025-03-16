@@ -43,9 +43,15 @@ async function plant(key, blockData, next) {
             if (response.status !== 'SUCCESS') {
                 throw new Error(`tx Failed: ${response.hash}`);
             }
-            signers[key].stats.fees += Number(response.feeCharged || 0);
+            const fee = Number(response.feeCharged || 0);
+            signers[key].stats.fees += fee;
+            signers[key].stats.feeCount += 1;
+            signers[key].stats.minFee = Math.min(signers[key].stats.minFee || Number.MAX_VALUE, fee);
+            signers[key].stats.maxFee = Math.max(signers[key].stats.maxFee || 0, fee);
             signers[key].stats.stake = Number(amount) / 10000000;
             signers[key].stats.stakeBlock = blockData.block;
+            signers[key].stats.minStake = Math.min(signers[key].stats.minStake || Number.MAX_VALUE, signers[key].stats.stake);
+            signers[key].stats.maxStake = Math.max(signers[key].stats.maxStake || 0, signers[key].stats.stake);
             console.log(`Farmer ${key} planted ${blockData.block} with ${Number(amount) / 10000000} KALE`);
         }
     } catch(err) {
@@ -71,10 +77,13 @@ async function work(mining, key, blockData) {
             executable
         } = config.miner;
         try {
+            const diff = (await strategy.difficulty(key, deepCopy(blockData))) || signers[key].difficulty || difficulty || 6;
             const { work } = await mine(executable, blockData.block, blockData.hash, nonce,
-                (await strategy.difficulty(key, deepCopy(blockData))) || signers[key].difficulty || difficulty || 6,
-                key, maxThreads, batchSize, device, gpu, verbose);
+                diff, key, maxThreads, batchSize, device, gpu, verbose);
             signers[key].work = work;
+            signers[key].stats.lastDiff = diff;
+            signers[key].stats.minDiff = Math.min(signers[key].stats.minDiff || Number.MAX_VALUE, diff);
+            signers[key].stats.maxDiff = Math.max(signers[key].stats.maxDiff || 0, diff);
             console.log(`Farmer ${key} worked [${work.hash}, ${work.nonce}] for ${blockData.block}`);
             return true;
         } catch (error) {
@@ -90,8 +99,16 @@ async function work(mining, key, blockData) {
                 throw new Error(`tx Failed: ${response.hash}`);
             }
             const value = Number(scValToNative(getReturnValue(response.resultMetaXdr)) || 0);
-            signers[key].stats.fees += Number(response.feeCharged || 0);
+            const fee = Number(response.feeCharged || 0);
+            signers[key].stats.fees += fee;
+            signers[key].stats.feeCount += 1;
+            signers[key].stats.minFee = Math.min(signers[key].stats.minFee || Number.MAX_VALUE, fee);
+            signers[key].stats.maxFee = Math.max(signers[key].stats.maxFee || 0, fee);
             signers[key].stats.workGap = value;
+            signers[key].stats.gaps += value;
+            signers[key].stats.workCount += 1;
+            signers[key].stats.minGap = Math.min(signers[key].stats.minGap || Number.MAX_VALUE, value);
+            signers[key].stats.maxGap = Math.max(signers[key].stats.maxGap || 0, value);
             console.log(`Farmer ${key} submitted work [hash: ${signers[key].work.hash}, nonce: ${signers[key].work.nonce}, gap: ${value}] for ${blockData.block}`);
         } catch(err) {
             delete signers[key].work;

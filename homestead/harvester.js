@@ -37,8 +37,15 @@ class Harvester {
                     throw new Error(`tx Failed: ${response.hash}`);
                 }
                 const value = Number(scValToNative(getReturnValue(response.resultMetaXdr)) || 0);
-                signers[farmer].stats.fees += Number(response.feeCharged || 0);
+                const fee = Number(response.feeCharged || 0);
+                signers[farmer].stats.fees += fee;
+                signers[farmer].stats.feeCount += 1;
+                signers[farmer].stats.minFee = Math.min(signers[farmer].stats.minFee || Number.MAX_VALUE, fee);
+                signers[farmer].stats.maxFee = Math.max(signers[farmer].stats.maxFee || 0, fee);
                 signers[farmer].stats.amount += value / 10000000;
+                signers[farmer].stats.harvestCount += 1;
+                signers[farmer].stats.minAmount = Math.min(signers[farmer].stats.minAmount || Number.MAX_VALUE, value / 10000000);
+                signers[farmer].stats.maxAmount = Math.max(signers[farmer].stats.maxAmount || 0, value / 10000000);
                 signers[farmer].stats.lastAmount = value / 10000000;
                 signers[farmer].stats.lastBlock = block;
                 console.log(`Farmer ${farmer} harvested block ${block} for ${value / 10000000} KALE`);
