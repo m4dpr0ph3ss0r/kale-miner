@@ -5,6 +5,7 @@
 
 const blessed = require('blessed');
 const axios = require('axios');
+const contrib = require('blessed-contrib');
 const PORT = process.env.PORT || 3002;
 
 const cache = {};
@@ -101,6 +102,70 @@ const tipBox = blessed.box({
     mouse: false,
     style: { fg: 'gray' }
 });
+
+const graphBox = blessed.box({
+    border: { type: 'line', fg: 'cyan' },
+    label: ' Hashrate Monitor ',
+    width: '100%-4',
+    height: 12,
+    left: 1,
+    top: '50%',
+    padding: { left: 1, right: 1 },
+    style: {
+        border: { fg: 'white' },
+        label: { fg: 'cyan', bold: true }
+    }
+});
+
+const hashrateGraph = contrib.line({
+    showLegend: true,
+    minY: 0,
+    xPadding: 5,
+    style: { line: 'magenta', text: 'white', baseline: 'black' }
+});
+
+graphBox.append(hashrateGraph); 
+screen.append(graphBox);
+
+let hashrates = [];
+let timestamps = [];
+
+function parseHashrate(hashrate) {
+    if (typeof hashrate === 'string' && hashrate.includes('MH/s')) {
+        return parseFloat(hashrate.replace(' MH/s', '')) * 1_000_000; // Convert to Hash/s
+    }
+    return parseFloat(hashrate) || 0;
+}
+
+async function updateHashrateGraph() {
+    try {
+        const response = await axios.get(`http://localhost:${PORT}/monitor`);
+        const { session } = response.data;
+
+        if (session) {
+            let hashrateString = session.hashrate || '0 MH/s';
+            let hashrateValue = parseHashrate(hashrateString);
+            const timestamp = new Date().toLocaleTimeString();
+
+            if (hashrates.length > 10) {
+                hashrates.shift();
+                timestamps.shift();
+            }
+            hashrates.push(hashrateValue);
+            timestamps.push(timestamp);
+
+            hashrateGraph.setData([{ title: 'Hashrate', x: timestamps, y: hashrates }]);
+        }
+
+        screen.render();
+    } catch (error) {
+        console.error(`Error fetching data from PORT ${PORT}:`, error.message);
+    }
+}
+
+setInterval(updateHashrateGraph, 5000);
+
+updateHashrateGraph();
 
 
 function recalcLayout() {
