@@ -190,6 +190,10 @@ Open `homestead/config.json` to configure your server settings.
         // Enable real-time miner output.
         "verbose": true
     },
+    "monitor": {
+        // Enable the monitor hashrate graph (default true).
+        showGraph: true
+    },
     "stellar": {
         // Stellar RPC URL, or use the environment variable RPC_URL.
         "rpc": "your-stellar-rpc-url",
