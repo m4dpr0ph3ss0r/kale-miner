@@ -6,11 +6,14 @@
     THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
 */
 
-#define CL_TARGET_OPENCL_VERSION 300
-
+#ifdef __APPLE__
+#include <OpenCL/opencl.h>
+#else
 #include <CL/cl.h>
+#endif
 #include <iostream>
 #include <fstream>
+#include <string>
 #include <vector>
 #include <cstdint>
 #include <cstring>
@@ -58,16 +61,18 @@ extern "C" int executeKernel(int deviceId, std::uint8_t* data, int dataSize, std
 
     if (showDeviceInfo) {
         char deviceName[256];
+        char deviceVersion[256];
         cl_uint computeUnits;
         size_t maxWorkGroupSize;
         size_t maxWorkItemSizes[3];
         cl_ulong globalMemSize;
         CL_CALL(clGetDeviceInfo(selectedDevice, CL_DEVICE_NAME, sizeof(deviceName), deviceName, nullptr));
+        CL_CALL(clGetDeviceInfo(selectedDevice, CL_DEVICE_VERSION, sizeof(deviceVersion), deviceVersion, nullptr));
         CL_CALL(clGetDeviceInfo(selectedDevice, CL_DEVICE_MAX_COMPUTE_UNITS, sizeof(computeUnits), &computeUnits, nullptr));
         CL_CALL(clGetDeviceInfo(selectedDevice, CL_DEVICE_MAX_WORK_GROUP_SIZE, sizeof(maxWorkGroupSize), &maxWorkGroupSize, nullptr));
         CL_CALL(clGetDeviceInfo(selectedDevice, CL_DEVICE_MAX_WORK_ITEM_SIZES, sizeof(maxWorkItemSizes), &maxWorkItemSizes, nullptr));
         CL_CALL(clGetDeviceInfo(selectedDevice, CL_DEVICE_GLOBAL_MEM_SIZE, sizeof(globalMemSize), &globalMemSize, nullptr));
-        std::cout << "Device: " << deviceName << std::endl;
+        std::cout << "Device: " << deviceName << " (" << deviceVersion << ")" << std::endl;
         std::cout << "Compute units: " << computeUnits << std::endl;
         std::cout << "Max work group size: " << maxWorkGroupSize << std::endl;
         std::cout << "Max work item sizes: [" 
@@ -82,7 +87,11 @@ extern "C" int executeKernel(int deviceId, std::uint8_t* data, int dataSize, std
         std::cerr << "Error: " << error << std::endl;
         return -1;
     }
+#if CL_TARGET_OPENCL_VERSION >= 200
     cl_command_queue commandQueue = clCreateCommandQueueWithProperties(context, selectedDevice, 0, &error);
+#else
+    cl_command_queue commandQueue = clCreateCommandQueue(context, selectedDevice, 0, &error);
+#endif
     if (!commandQueue) {
         std::cerr << "Error: " << error << std::endl;
         releaseResources(context, commandQueue, nullptr, nullptr, nullptr, 0);
@@ -110,7 +119,8 @@ extern "C" int executeKernel(int deviceId, std::uint8_t* data, int dataSize, std
         releaseResources(context, commandQueue, program, nullptr, nullptr, 0);
         return -1;
     }
-    error = clBuildProgram(program, 1, &selectedDevice, nullptr, nullptr, nullptr);
+    std::string buildOptions = "-D CL_TARGET_OPENCL_VERSION=" + std::to_string(CL_TARGET_OPENCL_VERSION);
+    error = clBuildProgram(program, 1, &selectedDevice, buildOptions.c_str(), nullptr, nullptr);
     if (error != CL_SUCCESS) {
         size_t logSize;
         clGetProgramBuildInfo(program, selectedDevice, CL_PROGRAM_BUILD_LOG, 0, NULL, &logSize);

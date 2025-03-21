@@ -6,7 +6,16 @@
     THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
 */
 
+#if CL_TARGET_OPENCL_VERSION >= 200
 #pragma OPENCL EXTENSION cl_khr_int64_base_atomics : enable
+typedef atomic_int atomic_int_t;
+#define load(p) atomic_load(p)
+#else
+typedef int atomic_int_t;
+inline int load(__global volatile int *p) { return atomic_cmpxchg(p, 0, 0); }
+// Uncomment to use volatile load fallback if performance impact is significant.
+// #define load(p) (*(volatile __global int*)(p))
+#endif
 
 #define maxDataSize 256
 
@@ -36,11 +45,11 @@ inline void copy(uchar* dest, const __global uchar* src, int size) {
 }
 
 __kernel void run(int dataSize, ulong startNonce, int nonceOffset, ulong batchSize, int difficulty,
-    __global const uchar* deviceData, __global atomic_int* found, __global uchar* output, __global ulong* validNonce
+    __global const uchar* deviceData, __global atomic_int_t* found, __global uchar* output, __global ulong* validNonce
 ) {
     ulong idx = get_global_id(0);
     ulong stride = get_global_size(0);
-    if (dataSize > maxDataSize || idx >= batchSize || atomic_load(found) == 1)
+    if (dataSize > maxDataSize || idx >= batchSize || load(found) == 1)
         return;
     ulong nonceEnd = startNonce + batchSize;
     uchar threadData[maxDataSize];
@@ -60,7 +69,7 @@ __kernel void run(int dataSize, ulong startNonce, int nonceOffset, ulong batchSi
             }
             return;
         }
-        if (atomic_load(found) == 1)
+        if (load(found) == 1)
             return;
     }
 }

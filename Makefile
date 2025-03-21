@@ -1,4 +1,5 @@
 GPU ?= 0
+OPENCL_VERSION ?= 300
 
 ifneq ($(OS),Windows_NT)
     TARGET = miner
@@ -17,11 +18,15 @@ ifneq ($(OS),Windows_NT)
         LINKER = $(NVCC)
         LDFLAGS =
     else ifneq ($(filter 2 OPENCL,$(GPU)),)
-        CXXFLAGS = $(GXX_FLAGS) -DGPU=2
+        CXXFLAGS = $(GXX_FLAGS) -DGPU=2 -DCL_TARGET_OPENCL_VERSION=$(OPENCL_VERSION)
         SRCS = miner.cpp clprog.cpp
         OBJS = miner.o clprog.o
         LINKER = $(CXX)
-        LDFLAGS = -pthread -lOpenCL
+        ifeq ($(shell uname),Darwin)
+            LDFLAGS = -pthread -framework OpenCL
+        else
+            LDFLAGS = -pthread -lOpenCL
+        endif
     else
         CXXFLAGS = $(GXX_FLAGS) -DGPU=0
         SRCS = miner.cpp
@@ -70,7 +75,7 @@ else
         SRCS = miner.cpp kernel.cu
         OBJS = miner.obj kernel.obj
     else ifeq ($(GPU),OPENCL)
-        CXXFLAGS = $(COMMON_FLAGS) /I"$(GPU_INCLUDE)" /DGPU=2
+        CXXFLAGS = $(COMMON_FLAGS) /I"$(GPU_INCLUDE)" /DGPU=2 /DCL_TARGET_OPENCL_VERSION=$(OPENCL_VERSION)
         LDFLAGS = $(COMMON_LDFLAGS) /LIBPATH:"$(GPU_LIB)" OpenCL.lib
         SRCS = miner.cpp clprog.cpp
         OBJS = miner.obj clprog.obj

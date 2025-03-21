@@ -44,7 +44,7 @@ You may want to explore more keccak implementations here [keccak.team/software](
 
 ### GPU Build (OpenCL)
 
-- **OpenCL 3.0** or higher
+- **OpenCL 1.2** or higher
 - **OpenCL SDK**
   - for NVIDIA: [NVIDIA CUDA Toolkit (includes OpenCL)](https://developer.nvidia.com/cuda-toolkit)
   - for AMD: [AMD SDK (supports OpenCL)](https://developer.amd.com/tools-and-sdks/)
@@ -79,7 +79,14 @@ make clean
 make GPU=OPENCL
 ```
 
-Note: The current OpenCL implementation uses the `cl_khr_int64_base_atomics` extension for atomic operations on 64-bit integers. Make sure your device supports it.
+To target OpenCL 1.2 (commonly required for macOS and older GPU drivers):
+```bash
+make GPU=OPENCL OPENCL_VERSION=120
+```
+
+Note:
+- For OpenCL 3.0, the implementation uses the `cl_khr_int64_base_atomics` extension for atomic operations.
+- For OpenCL 1.2, atomic reads are using `atomic_cmpxchg`. If performance impact is significant, you could try the volatile fallback (see `kernel.cl`).
 
 ## Usage
 
