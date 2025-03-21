@@ -5,9 +5,18 @@
 
 const blessed = require('blessed');
 const axios = require('axios');
+const contrib = require('blessed-contrib');
+const config = require(process.env.CONFIG || '../homestead/config.json');
 const PORT = process.env.PORT || 3002;
 
 const cache = {};
+
+const hashrateUnits = ['H/s', 'KH/s', 'MH/s', 'GH/s', 'TH/s', 'PH/s', 'EH/s'];
+const hashRateInterval = 5000;
+const hashRateCount = 7;
+const hashrates = Array.from({ length: hashRateCount }, (_, i) => ({
+    hashRate: 0, time: Date.now() - (hashRateCount - i) * hashRateInterval
+}));
 
 const screen = blessed.screen({
     smartCSR: true,
@@ -102,6 +111,20 @@ const tipBox = blessed.box({
     style: { fg: 'gray' }
 });
 
+const graphBox = contrib.line({
+    border: { type: 'line', fg: 'cyan' },
+    showLegend: true,
+    minY: 0,
+    xPadding: 5,
+    padding: { left: 1, right: 1, top: 1 },
+    style: {
+        line: 'magenta',
+        text: 'white',
+        baseline: 'black',
+        border: { fg: 'white' },
+        label: { fg: 'cyan', bold: true }
+    }
+});
 
 function recalcLayout() {
     const layouts = [
@@ -111,7 +134,8 @@ function recalcLayout() {
         { element: farmersTable, props: { top: 9, left: 1, width: '100%-4', height: '30%' } },
         { element: logBox, props: { bottom: 4, left: 1, width: '100%-4', height: 7 } },
         { element: statusBox, props: { bottom: 1, left: 1, width: '70%-1', height: 3 } },
-        { element: tipBox, props: { bottom: 1, left: '70%+1', width: '30%-3', height: 3 } }
+        { element: tipBox, props: { bottom: 1, left: '70%+1', width: '30%-3', height: 3 } },
+        { element: graphBox, props: { bottom: 11, left: 1, width: '100%-4', height: 12 } }
     ];
     layouts.forEach(({ element, props }) => {
         Object.assign(element, props);
@@ -129,13 +153,6 @@ screen.key(['f2'], () => {
     farmerDetailsMode = !farmerDetailsMode;
     updateData(true);
 });
-screen.append(harvestTable);
-screen.append(blockTable);
-screen.append(systemTable);
-screen.append(farmersTable);
-screen.append(logBox);
-screen.append(statusBox);
-screen.append(tipBox);
 
 const log = new Set();
 const pad = str => ` ${str}`;
@@ -204,7 +221,7 @@ function renderHarvestTable(totals) {
 
 function renderSystemTable(system) {
     const data = [
-        [pad('GPU'), pad('Hash Rate'), pad('KALE/min'), pad(system?.launchTube ? 'LaunchTube Credits' : 'LaunchTube')],
+        [pad('GPU'), pad('Hashrate'), pad('KALE/min'), pad(system?.launchTube ? 'LaunchTube Credits' : 'LaunchTube')],
     ];
     if (system) {
         data.push([
@@ -217,8 +234,38 @@ function renderSystemTable(system) {
     systemTable.setData(data);
 }
 
+function renderGraph() {
+    if (!(config.monitor?.showGraph ?? true)) {
+        return;
+    }
+
+    const modeUnit = Object.entries(hashrates.reduce((acc, { unit }) => {
+        if (unit) acc[unit] = (acc[unit] || 0) + 1;
+        return acc;
+    }, {})).reduce((a, [unit, count]) => count > a.count ? { unit, count }
+        : a, { unit: hashrateUnits[0], count: 0 }).unit || hashrateUnits[0];
+
+    const factor = Math.pow(1000, hashrateUnits.indexOf(modeUnit));
+    const series = [{
+        title: 'Hashrate',
+        x: hashrates.length ? hashrates.map(s => new Date(s.time).toLocaleTimeString()) : [],
+        y: hashrates.length ? hashrates.map(s => s.hashRate / factor) : []
+    }];
+    screen.remove(graphBox);
+    screen.append(graphBox);
+    graphBox.setLabel(` Hashrate (${modeUnit}) `);
+    graphBox.setData(series);
+}
+
+function parseHashrate(hashrate) {
+    const [num, unit] = hashrate?.split(' ') || [];
+    return { hashRate: parseFloat(num || '0') * Math.pow(1000, hashrateUnits.indexOf(unit || hashrateUnits[0])),
+        unit: unit || hashrateUnits[0] };
+}
+
 async function updateData(useCache) {
     try {
+        const now = Date.now();
         const response = useCache ? cache.response : await axios.get(`http://localhost:${PORT}/monitor`);
         cache.response = response;
         const { farmers, balances, session, block } = response.data;
@@ -265,14 +312,14 @@ async function updateData(useCache) {
             },
             { harvest: 0, fees: 0 }
         );
-        totals.time = session?.time || Date.now();
+        totals.time = session?.time || now;
 
         const blockData = {
             index: block?.block,
             time: Number(block?.details?.timestamp) * 1000,
             staked: `${(Number(block?.details?.staked_total) / 10000000).toFixed(3)} KALE`
         };
-        session.earnRate = (totals.harvest / ((Date.now() - totals.time) / 60000)).toFixed(3);
+        session.earnRate = (totals.harvest / ((now - totals.time) / 60000)).toFixed(3);
 
         if (session?.log) {
             session.log.forEach(entry => {
@@ -286,6 +333,14 @@ async function updateData(useCache) {
                 const trimmed = Array.from(log).slice(-50);
                 log.clear();
                 trimmed.forEach(stamp => log.add(stamp));
+            }
+        }
+
+        const { hashRate, unit } = parseHashrate(session.hashrate);
+        if (hashRate && (hashrates.length === 0 || now - hashrates[hashrates.length - 1].time >= hashRateInterval)) {
+            hashrates.push({ hashRate, time: now, unit });
+            if (hashrates.length > hashRateCount) {
+                hashrates.shift();
             }
         }
 
@@ -305,6 +360,7 @@ async function updateData(useCache) {
         renderHarvestTable(totals);
         renderBlockTable(blockData);
         renderSystemTable(session);
+        renderGraph();
         recalcLayout();
     } catch (error) {
         renderFarmersTable();
@@ -321,4 +377,18 @@ async function run() {
     await updateData();
     setTimeout(run, 1000);
 }
-run();
+
+(() => {
+    if (config.monitor?.showGraph ?? true) {
+        screen.append(graphBox);
+    }
+    screen.append(harvestTable);
+    screen.append(blockTable);
+    screen.append(systemTable);
+    screen.append(farmersTable);
+    screen.append(logBox);
+    screen.append(statusBox);
+    screen.append(tipBox);
+    recalcLayout();
+    run();
+})();
