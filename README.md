@@ -1,3 +1,6 @@
+[![Build Status](https://github.com/FredericRezeau/kale-miner/actions/workflows/build.yml/badge.svg)](https://github.com/FredericRezeau/kale-miner/actions/workflows/build.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](/LICENSE)
+
 # kale-miner
 
 ![Kale Miner Tools](./kale-miner.png)
