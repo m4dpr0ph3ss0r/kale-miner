@@ -1,6 +1,11 @@
 GPU ?= 0
 OPENCL_VERSION ?= 300
 
+KECCAK_IMPL ?= 0
+ifeq ($(KECCAK),XKCP_COMPACT)
+    KECCAK_IMPL = 1
+endif
+
 ifneq ($(OS),Windows_NT)
     TARGET = miner
     CXX = g++
@@ -28,7 +33,7 @@ ifneq ($(OS),Windows_NT)
             LDFLAGS = -pthread -lOpenCL
         endif
     else
-        CXXFLAGS = $(GXX_FLAGS) -DGPU=0
+        CXXFLAGS = $(GXX_FLAGS) -DGPU=0 -DKECCAK=$(KECCAK_IMPL)
         SRCS = miner.cpp
         OBJS = miner.o
         LINKER = $(CXX)
@@ -80,7 +85,7 @@ else
         SRCS = miner.cpp clprog.cpp
         OBJS = miner.obj clprog.obj
     else
-        CXXFLAGS = $(COMMON_FLAGS)
+        CXXFLAGS = $(COMMON_FLAGS) /DKECCAK=$(KECCAK_IMPL)
         LDFLAGS = $(COMMON_LDFLAGS)
         SRCS = miner.cpp
         OBJS = miner.obj
