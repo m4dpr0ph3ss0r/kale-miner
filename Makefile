@@ -2,7 +2,7 @@ GPU ?= 0
 OPENCL_VERSION ?= 300
 
 KECCAK_IMPL ?= 0
-ifeq ($(KECCAK),XKCP_COMPACT)
+ifeq ($(KECCAK),XKCP)
     KECCAK_IMPL = 1
 endif
 

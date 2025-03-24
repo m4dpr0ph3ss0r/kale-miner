@@ -63,9 +63,9 @@ To compile the miner without GPU support, simply run:
 make clean
 make
 ```
-To compile using the official [XKCP CompactFIPS202 implementation](https://github.com/XKCP/XKCP/blob/master/Standalone/CompactFIPS202/C/Keccak-more-compact.c) use the following command:
+To compile using the official [XKCP CompactFIPS202 implementation](https://github.com/XKCP/XKCP/blob/master/Standalone/CompactFIPS202/C/Keccak-more-compact.c) (likely slower) use the following command:
 ```bash
-make KECCAK=XKCP_COMPACT
+make KECCAK=XKCP
 ```
 
 ### GPU-Enabled Compilation
