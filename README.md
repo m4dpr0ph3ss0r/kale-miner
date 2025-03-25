@@ -20,7 +20,16 @@ Learn more about KALE:
 
 ### CPU Performance
 
-Tested with **Intel Core i9-14900K @ 3.20 GHz** processor (24 cores), the miner achieved an **average hash rate of 35 MH/s**.
+| CPU          | Keccak256 Impl. | Avg. Hash Rate |
+|---------------------|-----------|-------------------|
+| Raspberry Pi 4 @ 2.00GHz (4 cores) | [IN-HOUSE OPTIMIZED](./utils/keccak.h)      | ~1.40 MH/s     |
+| Raspberry Pi 4 @ 2.00GHz (4 cores) | [IN-HOUSE PORTABLE](./utils/keccak_opt.h)      | ~1.25 MH/s     |
+| Raspberry Pi 4 @ 2.00GHz (4 cores) | [XKCP STANDALONE REF](./utils/keccak_ref.h)      | ~60 KH/s     |
+| Intel Core i9 @ 3.20 GHz (24 cores) | [IN-HOUSE OPTIMIZED](./utils/keccak.h)      | ~49 MH/s     |
+| Intel Core i9 @ 3.20 GHz (24 cores) | [IN-HOUSE PORTABLE](./utils/keccak_opt.h)      | ~42 MH/s     |
+| Intel Core i9 @ 3.20 GHz (24 cores) | [XKCP STANDALONE REF](./utils/keccak_ref.h)      | ~3 MH/s     |
+
+You may want to explore more keccak CPU implementations here [keccak.team/software](https://keccak.team/software.html) for potential performance improvements.
 
 ### GPU Performance
 
@@ -30,10 +39,6 @@ With GPU acceleration enabled on an **NVIDIA GeForce RTX 4080** GPU, the miner a
 |---------------------|-----------|-------------------|
 | NVIDIA GeForce RTX 4080 | CUDA      | ~1.9 GH/s     |
 | NVIDIA GeForce RTX 4080 | OPENCL      | ~1.3 GH/s     |
-
-### Keccak Hashing
-
-You may want to explore more keccak implementations here [keccak.team/software](https://keccak.team/software.html) for potential performance improvements (note that the standalone [XKCP implementation](https://github.com/XKCP/XKCP/blob/master/Standalone/CompactFIPS202/C/Keccak-more-compact.c) was much slower in my environment).
 
 ## Requirements
 
@@ -63,9 +68,17 @@ To compile the miner without GPU support, simply run:
 make clean
 make
 ```
-To compile using the official [XKCP CompactFIPS202 implementation](https://github.com/XKCP/XKCP/blob/master/Standalone/CompactFIPS202/C/Keccak-more-compact.c) (likely slower) use the following command:
+
+To compile using the in-house optimized Keccak-f[1600] permutation (faster, especially on ARM architectures):
+
 ```bash
-make KECCAK=XKCP
+make KECCAK=FAST
+```
+
+To compile using the reference [XKCP CompactFIPS202 implementation](https://github.com/XKCP/XKCP/blob/master/Standalone/CompactFIPS202/C/Keccak-more-compact.c) (slower):
+
+```bash
+make KECCAK=REF
 ```
 
 ### GPU-Enabled Compilation

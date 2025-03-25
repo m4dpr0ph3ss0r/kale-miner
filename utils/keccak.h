@@ -1,14 +1,13 @@
-// MIT License
+/*
+    MIT License
+    Author: Fred Kyung-jin Rezeau <fred@litemint.com>, 2024
+    Permission is granted to use, copy, modify, and distribute this software for any purpose
+    with or without fee.
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
 
-// Keccak256 standalone implementation based on the NIST standard:
-// Reference: https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.202.pdf
-
-// Additional C/C++ implementations for Keccak can be found here:
-// https://keccak.team/software.html
-
-// Note: The standalone XKCP implementation performed slower in my environment.
-// (use `FIPS202_SHA3_256` but replace the padding parameter 0x06 with 0x01)
-// https://github.com/XKCP/XKCP/blob/master/Standalone/CompactFIPS202/C/Keccak-more-compact.c
+    Keccak256 standalone C++ implementation based on the NIST standard:
+    Reference: https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.202.pdf
+*/
 
 #pragma once
 
@@ -18,7 +17,8 @@
 #ifndef KECCAK
 #define KECCAK 0
 #endif
-#define KECCAK_XKCP 1
+#define KECCAK_REF 1
+#define KECCAK_OPT 2
 
 #if defined(_MSC_VER)
 #define RESTRICT __restrict
@@ -47,7 +47,7 @@ INLINE void* assume_aligned(void* p, size_t align) {
 #elif defined(__clang__)
 #define PRAGMA(x) _Pragma(#x)
 #define PRAGMA_UNROLL(x) PRAGMA(clang loop unroll_count(x))
-#define PRAGMA_IVDEP PRAGMA(GCC ivdep)
+#define PRAGMA_IVDEP PRAGMA(clang loop vectorize(enable))
 #elif defined(__GNUC__)
 #define PRAGMA(x) _Pragma(#x)
 #define PRAGMA_UNROLL(x) PRAGMA(GCC unroll x)
@@ -56,8 +56,12 @@ INLINE void* assume_aligned(void* p, size_t align) {
 #define PRAGMA_UNROLL(x)
 #endif
 
-#if KECCAK == KECCAK_XKCP
-#include "xkcp_keccak_compact.h"
+#if KECCAK == KECCAK_OPT
+#include "keccak_opt.h"
+#endif
+
+#if KECCAK == KECCAK_REF
+#include "keccak_ref.h"
 class Keccak256 {
     public:
         Keccak256() { reset(); }
@@ -108,32 +112,6 @@ class Keccak256 {
             std::memset(state, 0, sizeof(state));
             offset = 0;
         }
-
-        int runTests() {
-            std::vector<std::pair<std::vector<uint8_t>, std::vector<uint8_t>>> testCases = {
-                {
-                    {},
-                    {0xc5, 0xd2, 0x46, 0x01, 0x86, 0xf7, 0x23, 0x3c, 0x92, 0x7e, 0x7d, 0xb2, 0xdc, 0xc7, 0x03, 0xc0,
-                    0xe5, 0x00, 0xb6, 0x53, 0xca, 0x82, 0x27, 0x3b, 0x7b, 0xfa, 0xd8, 0x04, 0x5d, 0x85, 0xa4, 0x70}
-                },
-                {
-                    {'a', 'b', 'c'},
-                    {0x4e, 0x03, 0x65, 0x7a, 0xea, 0x45, 0xa9, 0x4f, 0xc7, 0xd4, 0x7b, 0xa8, 0x26, 0xc8, 0xd6, 0x67,
-                    0xc0, 0xd1, 0xe6, 0xe3, 0x3a, 0x64, 0xa0, 0x36, 0xec, 0x44, 0xf5, 0x8f, 0xa1, 0x2d, 0x6c, 0x45}
-                }
-            };
-            bool allPassed = true;
-            for (const auto& [message, expectedHash] : testCases) {
-                allPassed &= runTest(message, expectedHash);
-            }
-            if (allPassed) {
-                std::cout << "Passed." << std::endl;
-            } else {
-                std::cout << "Failed." << std::endl;
-            }
-            return allPassed ? 0 : 1;
-        }
-
     private:
         static constexpr size_t rate = 136;
         static constexpr size_t capacity = 64;
@@ -142,6 +120,9 @@ class Keccak256 {
         size_t offset = 0;
 
         static void keccakF1600(uint8_t* RESTRICT state) {
+            #if KECCAK == KECCAK_OPT
+            fast_keccakF1600(state);
+            #else
             static constexpr uint64_t roundConstants[24] = {
                 0x0000000000000001ULL, 0x0000000000008082ULL, 0x800000000000808aULL, 0x8000000080008000ULL,
                 0x000000000000808bULL, 0x0000000080000001ULL, 0x8000000080008081ULL, 0x8000000000008009ULL,
@@ -208,10 +189,37 @@ class Keccak256 {
 
                 state64[0] ^= roundConstant;
             }
+            #endif
         }
 
         static INLINE uint64_t rotl64(uint64_t x, uint64_t n) {
             return (x << n) | (x >> (64 - n));
+        }
+
+        #if defined(TESTS)
+        int runTests() {
+            std::vector<std::pair<std::vector<uint8_t>, std::vector<uint8_t>>> testCases = {
+                {
+                    {},
+                    {0xc5, 0xd2, 0x46, 0x01, 0x86, 0xf7, 0x23, 0x3c, 0x92, 0x7e, 0x7d, 0xb2, 0xdc, 0xc7, 0x03, 0xc0,
+                    0xe5, 0x00, 0xb6, 0x53, 0xca, 0x82, 0x27, 0x3b, 0x7b, 0xfa, 0xd8, 0x04, 0x5d, 0x85, 0xa4, 0x70}
+                },
+                {
+                    {'a', 'b', 'c'},
+                    {0x4e, 0x03, 0x65, 0x7a, 0xea, 0x45, 0xa9, 0x4f, 0xc7, 0xd4, 0x7b, 0xa8, 0x26, 0xc8, 0xd6, 0x67,
+                    0xc0, 0xd1, 0xe6, 0xe3, 0x3a, 0x64, 0xa0, 0x36, 0xec, 0x44, 0xf5, 0x8f, 0xa1, 0x2d, 0x6c, 0x45}
+                }
+            };
+            bool allPassed = true;
+            for (const auto& [message, expectedHash] : testCases) {
+                allPassed &= runTest(message, expectedHash);
+            }
+            if (allPassed) {
+                std::cout << "Passed." << std::endl;
+            } else {
+                std::cout << "Failed." << std::endl;
+            }
+            return allPassed ? 0 : 1;
         }
 
         void printHash(const uint8_t* hash, size_t length) {
@@ -231,5 +239,6 @@ class Keccak256 {
             printHash(hash, 32);
             return passed;
         }
+        #endif
     };
 #endif

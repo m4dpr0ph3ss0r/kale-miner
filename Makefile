@@ -2,8 +2,10 @@ GPU ?= 0
 OPENCL_VERSION ?= 300
 
 KECCAK_IMPL ?= 0
-ifeq ($(KECCAK),XKCP)
+ifeq ($(KECCAK),REF)
     KECCAK_IMPL = 1
+else ifeq ($(KECCAK),FAST)
+    KECCAK_IMPL = 2
 endif
 
 ifneq ($(OS),Windows_NT)
@@ -14,6 +16,12 @@ ifneq ($(OS),Windows_NT)
     COMMON_FLAGS = -O3 -DNDEBUG -ffast-math -funroll-loops -pthread -std=c++17 -Iutils
     GXX_FLAGS = $(COMMON_FLAGS) -march=native -flto
     NVCC_FLAGS = $(COMMON_FLAGS)
+
+    ifeq ($(shell uname),Darwin)
+        ifeq ($(shell uname -m),arm64)
+            GXX_FLAGS += -mcpu=native -mtune=native -fstrict-aliasing -flto=thin
+        endif
+    endif
 
     ifneq ($(filter 1 CUDA,$(GPU)),)
         CXXFLAGS = $(GXX_FLAGS) -DGPU=1

@@ -1,4 +1,4 @@
-// CompactFIPS202 Keccak C implementation from the eXtended Keccak Code Package (XKCP)
+// CompactFIPS202 Keccak reference C implementation from the eXtended Keccak Code Package (XKCP)
 // Source: https://github.com/XKCP/XKCP/blob/master/Standalone/CompactFIPS202/C/Keccak-more-compact.c
 // License: CC0 (http://creativecommons.org/publicdomain/zero/1.0/)
 

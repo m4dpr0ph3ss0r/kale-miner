@@ -1,14 +1,13 @@
-// MIT License
+/*
+    MIT License
+    Author: Fred Kyung-jin Rezeau <fred@litemint.com>, 2024
+    Permission is granted to use, copy, modify, and distribute this software for any purpose
+    with or without fee.
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
 
-// Keccak256 standalone OpenCL implementation based on the NIST standard:
-// Reference: https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.202.pdf
-
-// Additional C/C++ implementations for Keccak can be found here:
-// https://keccak.team/software.html
-
-// Note: The standalone XKCP implementation performed slower in my environment.
-// (use `FIPS202_SHA3_256` but replace the padding parameter 0x06 with 0x01)
-// https://github.com/XKCP/XKCP/blob/master/Standalone/CompactFIPS202/C/Keccak-more-compact.c
+    Keccak256 standalone OpenCL implementation based on the NIST standard:
+    Reference: https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.202.pdf
+*/
 
 typedef struct {
     uchar state[200];
