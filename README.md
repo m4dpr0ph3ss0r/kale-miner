@@ -18,27 +18,30 @@ Learn more about KALE:
 
 ## Performance
 
-### CPU Performance
+### CPU Benchmarks
 
-| CPU          | Keccak256 Impl. | Avg. Hash Rate |
+Both in-house CPU implementations are portable. The optimized version is designed to favor ARM architectures but falls back gracefully on other platforms.
+
+| CPU          | Keccak256 Implementation | Avg. Hash Rate |
 |---------------------|-----------|-------------------|
-| Raspberry Pi 4 @ 2.00GHz (4 cores) | [IN-HOUSE OPTIMIZED](./utils/keccak.h)      | ~1.40 MH/s     |
-| Raspberry Pi 4 @ 2.00GHz (4 cores) | [IN-HOUSE PORTABLE](./utils/keccak_opt.h)      | ~1.25 MH/s     |
-| Raspberry Pi 4 @ 2.00GHz (4 cores) | [XKCP STANDALONE REF](./utils/keccak_ref.h)      | ~60 KH/s     |
-| Intel Core i9 @ 3.20 GHz (24 cores) | [IN-HOUSE OPTIMIZED](./utils/keccak.h)      | ~49 MH/s     |
-| Intel Core i9 @ 3.20 GHz (24 cores) | [IN-HOUSE PORTABLE](./utils/keccak_opt.h)      | ~42 MH/s     |
-| Intel Core i9 @ 3.20 GHz (24 cores) | [XKCP STANDALONE REF](./utils/keccak_ref.h)      | ~3 MH/s     |
+| Raspberry Pi 4 @ 2.00GHz (4 cores) | [In-House Optimized](./utils/keccak_opt.h)      | ~1.40 MH/s     |
+| Raspberry Pi 4 @ 2.00GHz (4 cores) | [In-House Portable](./utils/keccak.h)      | ~1.25 MH/s     |
+| Raspberry Pi 4 @ 2.00GHz (4 cores) | [XKCP Reference](./utils/keccak_ref.h)      | ~60 KH/s     |
+| Intel Core i9 @ 3.20 GHz (24 cores) | [In-House Optimized](./utils/keccak_opt.h)      | ~49 MH/s     |
+| Intel Core i9 @ 3.20 GHz (24 cores) | [In-House Portable](./utils/keccak.h)      | ~42 MH/s     |
+| Intel Core i9 @ 3.20 GHz (24 cores) | [XKCP Reference](./utils/keccak_ref.h)      | ~3 MH/s     |
 
-You may want to explore more keccak CPU implementations here [keccak.team/software](https://keccak.team/software.html) for potential performance improvements.
+Note: For additional CPU-based Keccak implementations, references and optimization ideas, visit [keccak.team/software](https://keccak.team/software.html).
 
-### GPU Performance
+### GPU Benchmarks
 
-With GPU acceleration enabled on an **NVIDIA GeForce RTX 4080** GPU, the miner achieved an average hash rate of **1.9 GH/s** (CUDA).
+Developed three standalone GPU kernels (CUDA, OpenCL, WebGPU compute shader) and benchmarked them on an **NVIDIA GeForce RTX 4080**. The CUDA kernel delivered the best performance, and also received additional low-level tuning. It is recommended for NVIDIA GPUs. The Web GPU compute shader (int32-based Keccak-256 hashing) runs well on Chrome, but Metal backend currently underperforms.
 
-| GPU           | Framework | Avg. Hash Rate |
+| GPU           | Keccak256 Implementation | Avg. Hash Rate |
 |---------------------|-----------|-------------------|
-| NVIDIA GeForce RTX 4080 | CUDA      | ~1.9 GH/s     |
-| NVIDIA GeForce RTX 4080 | OPENCL      | ~1.3 GH/s     |
+| NVIDIA GeForce RTX 4080 | [CUDA Kernel](./utils/keccak.cuh)      | ~1.9 GH/s     |
+| NVIDIA GeForce RTX 4080 | [OPENCL Kernel](./utils/keccak.cl)      | ~1.3 GH/s     |
+| NVIDIA GeForce RTX 4080 | [Web GPU Shader](./utils/keccak.wgsl)      | ~1.1 GH/s (Chrome)    |
 
 ## Requirements
 
