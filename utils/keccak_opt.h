@@ -9,7 +9,11 @@
     Portable; compiles on other architectures w/ reduced optimization.
 */
 
-#if defined(__GNUC__) || defined(__clang__)
+#if defined(__clang__)
+#define HOT __attribute__((hot))
+#define OPTIMIZE
+#define ALIGN_ASSERT(p, a) do { if (((uintptr_t)(p) & ((a)-1)) != 0) __builtin_unreachable(); } while(0)
+#elif defined(__GNUC__)
 #define HOT __attribute__((hot))
 #define OPTIMIZE __attribute__((optimize("unroll-loops","rename-registers","inline-functions")))
 #define ALIGN_ASSERT(p, a) do { if (((uintptr_t)(p) & ((a)-1)) != 0) __builtin_unreachable(); } while(0)
@@ -20,13 +24,17 @@
 #endif
 
 static INLINE HOT OPTIMIZE uint64_t fast_rotl(uint64_t x, uint64_t n) {
-#if defined(__aarch64__)
-    uint64_t r;
-    asm ("ror %0, %1, %2" : "=r"(r) : "r"(x), "I"((64 - n) & 63));
-    return r;
-#else
-    return (x << n) | (x >> (64 - n));
-#endif
+    #if defined(__aarch64__) && (defined(__GNUC__) || defined(__clang__))
+        if (__builtin_constant_p(n)) {
+            uint64_t r;
+            asm ("ror %0, %1, %2" : "=r"(r) : "r"(x), "I"((64 - n) & 63));
+            return r;
+        } else {
+            return (x << n) | (x >> (64 - n));
+        }
+    #else
+        return (x << n) | (x >> (64 - n));
+    #endif
 }
 
 static INLINE HOT OPTIMIZE void fast_keccakF1600(uint8_t* state) {
@@ -38,21 +46,6 @@ static INLINE HOT OPTIMIZE void fast_keccakF1600(uint8_t* state) {
         0x8000000000008002ULL, 0x8000000000000080ULL, 0x000000000000800aULL, 0x800000008000000aULL,
         0x8000000080008081ULL, 0x8000000000008080ULL, 0x0000000080000001ULL, 0x8000000080008008ULL
     };
-
-    #define PI_STEP(pi, ro) { \
-        uint64_t t = s[pi]; \
-        s[pi] = fast_rotl(temp, ro); \
-        temp = t; \
-    }
-
-    #define CHI_STEP(y) { \
-        uint64_t t0 = s[y], t1 = s[y + 1], t2 = s[y + 2], t3 = s[y + 3], t4 = s[y + 4]; \
-        s[y] = t0 ^ ((~t1) & t2); \
-        s[y + 1] = t1 ^ ((~t2) & t3); \
-        s[y + 2] = t2 ^ ((~t3) & t4); \
-        s[y + 3] = t3 ^ ((~t4) & t0); \
-        s[y + 4] = t4 ^ ((~t0) & t1); \
-    }
 
     ALIGN_ASSERT(state, 64);
     uint64_t* RESTRICT s = reinterpret_cast<uint64_t*>(ASSUME_ALIGNED(state, 64));
@@ -75,13 +68,28 @@ static INLINE HOT OPTIMIZE void fast_keccakF1600(uint8_t* state) {
         s[15] ^= d0; s[16] ^= d1; s[17] ^= d2; s[18] ^= d3; s[19] ^= d4;
         s[20] ^= d0; s[21] ^= d1; s[22] ^= d2; s[23] ^= d3; s[24] ^= d4;
         uint64_t temp = s[1];
+        #define PI_STEP(pi, ro) do { \
+            uint64_t t = s[pi]; \
+            s[pi] = fast_rotl(temp, ro); \
+            temp = t; \
+        } while(0)
         PI_STEP(10, 1); PI_STEP(7, 3); PI_STEP(11, 6); PI_STEP(17, 10);
         PI_STEP(18, 15); PI_STEP(3, 21); PI_STEP(5, 28); PI_STEP(16, 36);
         PI_STEP(8, 45); PI_STEP(21, 55); PI_STEP(24, 2); PI_STEP(4, 14);
         PI_STEP(15, 27); PI_STEP(23, 41); PI_STEP(19, 56); PI_STEP(13, 8);
         PI_STEP(12, 25); PI_STEP(2, 43); PI_STEP(20, 62); PI_STEP(14, 18);
         PI_STEP(22, 39); PI_STEP(9, 61); PI_STEP(6, 20); PI_STEP(1, 44);
+        #undef PI_STEP
+        #define CHI_STEP(y) do { \
+            uint64_t t0 = s[y], t1 = s[y + 1], t2 = s[y + 2], t3 = s[y + 3], t4 = s[y + 4]; \
+            s[y] = t0 ^ ((~t1) & t2); \
+            s[y + 1] = t1 ^ ((~t2) & t3); \
+            s[y + 2] = t2 ^ ((~t3) & t4); \
+            s[y + 3] = t3 ^ ((~t4) & t0); \
+            s[y + 4] = t4 ^ ((~t0) & t1); \
+        } while(0)
         CHI_STEP(0); CHI_STEP(5); CHI_STEP(10); CHI_STEP(15); CHI_STEP(20);
+        #undef CHI_STEP
         s[0] ^= roundConstants[round];
     }
 }
