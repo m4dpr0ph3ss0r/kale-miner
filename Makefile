@@ -10,8 +10,8 @@ endif
 
 ifneq ($(OS),Windows_NT)
     TARGET = miner
-    CXX = g++
-    NVCC = nvcc
+    CXX ?= g++
+    NVCC = nvcc -ccbin $(CXX)
 
     COMMON_FLAGS = -O3 -DNDEBUG -ffast-math -funroll-loops -pthread -std=c++17 -Iutils
     GXX_FLAGS = $(COMMON_FLAGS) -march=native -flto
