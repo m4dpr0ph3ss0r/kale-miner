@@ -61,33 +61,39 @@ async function plant(key, blockData, next) {
     }
 }
 
-async function work(mining, key, blockData) {
+async function work(mining, key, blockData, onStart) {
     if (signers[key].status !== FarmerStatus.WORKING) {
         return;
     }
-    if (mining && !signers[key].work) {
-        const {
-            difficulty,
-            nonce,
-            gpu,
-            maxThreads,
-            batchSize,
-            verbose,
-            device,
-            executable
-        } = config.miner;
+    const {
+        difficulty,
+        nonce,
+        gpu,
+        maxThreads,
+        batchSize,
+        verbose,
+        device,
+        executable,
+        continuous
+    } = config.miner;
+
+    if (mining && (!signers[key].work || continuous)) {
         try {
-            const diff = (await strategy.difficulty(key, deepCopy(blockData))) || signers[key].difficulty || difficulty || 6;
-            const { work } = await mine(executable, blockData.block, blockData.hash, nonce,
-                diff, key, maxThreads, batchSize, device, gpu, verbose);
-            signers[key].work = work;
+            const workDiff = signers[key].work?.difficulty ? signers[key].work.difficulty + 1 : 0;
+            const workNonce = signers[key].work?.nonce ? signers[key].work.nonce + 1 : 0;
+            const diff = workDiff || (continuous ? 6 : (await strategy.difficulty(key, deepCopy(blockData))) || signers[key].difficulty || difficulty || 6);
+            const { work } = await mine(executable, blockData.block, blockData.hash, workNonce || nonce,
+                diff, key, maxThreads, batchSize, device, gpu, verbose, onStart);
+            signers[key].work = { ...work, difficulty: diff };
             signers[key].stats.lastDiff = diff;
             signers[key].stats.minDiff = Math.min(signers[key].stats.minDiff || Number.MAX_VALUE, diff);
             signers[key].stats.maxDiff = Math.max(signers[key].stats.maxDiff || 0, diff);
             console.log(`Farmer ${key} worked [${work.hash}, ${work.nonce}] for ${blockData.block}`);
             return true;
         } catch (error) {
-            delete signers[key].work;
+            if (!continuous) {
+                delete signers[key].work;
+            }
             const errorCode = getError(error);
             console.error(`Farmer ${key} failed to work for ${blockData.block}: ${errorCode}`);
             await new Promise(resolve => setTimeout(resolve, pollInterval));
@@ -109,6 +115,9 @@ async function work(mining, key, blockData) {
             signers[key].stats.workCount += 1;
             signers[key].stats.minGap = Math.min(signers[key].stats.minGap || Number.MAX_VALUE, value);
             signers[key].stats.maxGap = Math.max(signers[key].stats.maxGap || 0, value);
+            signers[key].stats.diffs += signers[key].difficulty;
+            signers[key].stats.minDiff = Math.min(signers[key].stats.minDiff || Number.MAX_VALUE, signers[key].difficulty);
+            signers[key].stats.maxDiff = Math.max(signers[key].stats.maxDiff || 0, signers[key].difficulty);
             console.log(`Farmer ${key} submitted work [hash: ${signers[key].work.hash}, nonce: ${signers[key].work.nonce}, gap: ${value}] for ${blockData.block}`);
         } catch(err) {
             delete signers[key].work;
@@ -119,7 +128,7 @@ async function work(mining, key, blockData) {
     }
 }
 
-async function mine(minerExec, block, hash, nonce, difficulty, key, maxThreads, batchSize, device, gpu, verbose) {
+async function mine(minerExec, block, hash, nonce, difficulty, key, maxThreads, batchSize, device, gpu, verbose, onStart = null) {
     return new Promise((resolve, reject) => {
         const args = [
             block, hash, nonce, difficulty, key,
@@ -136,6 +145,9 @@ async function mine(minerExec, block, hash, nonce, difficulty, key, maxThreads, 
         let output = '';
         const miner = path.resolve(minerExec);
         const minerProc = spawn(miner, args, { cwd: path.dirname(miner) });
+        if (typeof onStart === 'function') {
+            onStart(minerProc);
+        }
         minerProc.stdout.on('data', (data) => {
             const lines = `${data}`.split('\n');
             lines.forEach((line) => {
@@ -175,8 +187,8 @@ async function mine(minerExec, block, hash, nonce, difficulty, key, maxThreads, 
 
 async function runFarm(interval) {
     session.time = Date.now();
-    const hasHarvester = StrKey.isValidEd25519SecretSeed(config.harvester?.account);
-    if (hasHarvester) {
+    const asyncHarvest = StrKey.isValidEd25519SecretSeed(config.harvester?.account);
+    if (asyncHarvest) {
         Harvester.run();
     }
 
@@ -242,7 +254,7 @@ async function runFarm(interval) {
                     }
                 }
             }
-            await Harvester.flush();
+            await Harvester.flush(true);
             continue;
         }
 
@@ -261,13 +273,13 @@ async function runFarm(interval) {
         }
 
         // Harvest prev block.
-        const harvestTime = ((isNaN(config.harvester?.delay) || !hasHarvester)
+        const harvestTime = ((isNaN(config.harvester?.delay) || !asyncHarvest)
             ? 0 : Date.now() + config.harvester.delay * 1000 + Math.floor(Math.random() * 20000));
         for (const key in signers) {
             Harvester.add(key, blockData.block - 1, harvestTime);
         }
 
-        if (!hasHarvester) {
+        if (!asyncHarvest) {
             await Harvester.flush();
         }
 
@@ -276,19 +288,40 @@ async function runFarm(interval) {
             if (harvestOnly || signers[key].harvestOnly) {
                 continue;
             }
+
+            elapsedTime = computeElapsed();
             if (hasElapsed) {
                 break;
             }
 
+            let killTimer, killed;
             const value = (await strategy.minWorkTime(key, deepCopy(blockData))) || signers[key].minWorkTime;
             const minWorkTime = isNaN(value) ? 0 : value;
-            if (await work(true, key, blockData)) {
-                const timeLeft = minWorkTime - elapsedTime;
-                console.log(`Farmer ${key} submitting work ${timeLeft <= 0 ? 'immediately' : `later (minimum time: ${timeLeft.toFixed(0)} sec)`}`);
-                signers[key].stats.workTime = Date.now() + Math.max(0, timeLeft * 1000);
-                signers[key].stats.workBlock = blockData.block;
+            if ((minWorkTime - 15 > elapsedTime || !signers[key].work) && await work(true, key, blockData, (proc) => {
+                if (!signers[key].work || !config.miner?.continuous) {
+                    return;
+                }
+                const killTime = Math.max(10, (minWorkTime - elapsedTime) * 1000);
+                console.log(`Farmer ${key} killing mining process in ${killTime.toFixed(2)}ms`);
+                killTimer = setTimeout(() => {
+                    try {
+                        killed = true;
+                        proc.kill('SIGTERM');
+                        console.log(`Farmer ${key} killed mining process after ${killTime.toFixed(0)}ms`);
+                    } catch (e) {
+                        console.error(`Farmer ${key} failed to kill mining process: ${e}`);
+                    }
+                }, killTime);
+            })) {
+                if (!killed) {
+                    const timeLeft = minWorkTime - elapsedTime;
+                    console.log(`Farmer ${key} submitting work ${timeLeft <= 0 ? 'immediately' : `later (minimum time: ${timeLeft.toFixed(0)} sec)`}`);
+                    signers[key].stats.workTime = Date.now() + Math.max(0, timeLeft * 1000);
+                    signers[key].stats.workBlock = blockData.block;
+                }
             }
-            if (minWorkTime <= elapsedTime) {
+            clearTimeout(killTimer);
+            if (minWorkTime <= elapsedTime || (killed && signers[key].work)) {
                 await work(false, key, blockData);
                 await updateStatus(key, blockData.block);
             }

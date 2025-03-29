@@ -14,6 +14,7 @@
 Learn more about KALE:
 - [The KALEpail Project](https://github.com/kalepail/KALE-sc) by [kalepail](https://github.com/kalepail)
 - [KALE Fan Fiction Lore](https://kalepail.com/kale/kale-chapter-1) by [briwylde08](https://github.com/briwylde08)
+- [project-kalefail](https://github.com/ElliotFriend/project-kalefail) by [ElliotFriend](https://github.com/ElliotFriend)
 - Join [Stellar Global](https://discord.gg/GQhjwBGrJG) Discord.
 
 ## Performance
@@ -173,8 +174,8 @@ Open `homestead/config.json` to configure your server settings.
             // Optional. Adjust based on your CPU/GPU power.
             "difficulty": 6,
             // Optional: Defines the minimum time (in seconds) before work is submitted
-            // to the contract (default is 0 for immediate submission).
-            "minWorkTime": 0,
+            // to the contract (set to 0 for immediate submission).
+            "minWorkTime": 240,
             // Optional: Set the miner to only harvest the previous block if work was submitted.
             "harvestOnly": false
         }
@@ -192,7 +193,15 @@ Open `homestead/config.json` to configure your server settings.
         // Overrides farmer settings if true.
         "harvestOnly": false,
         // Optional: Specifies the number of retry for failed harvest due to contract error.
-        "retryCount": 3
+        "retryCount": 3,
+        // Use the tractor contract by github/@ElliotFriend to harvest more efficiently.
+        // https://github.com/ElliotFriend/project-kalefail/tree/main/contracts/kale_tractor
+        "tractor": {
+            // Address of the tractor contract.
+            "contract": "CBGSBKYMYO6OMGHQXXNOBRGVUDFUDVC2XLC3SXON5R2SNXILR7XCKKY3",
+            // Harvest frequency (in seconds).
+            "frequency": 900
+        }
     },
     // Tune these settings according to your system’s performance.
     "miner": {

@@ -163,7 +163,7 @@ const formatSessionTime = (time) => {
 
 function renderFarmersTable(farmers) {
     const data = farmerDetailsMode ? [
-        [pad('Farmer'), pad('Native Balance'), pad('Harvest (Min/Max/Avg)'), pad('Fee (Min/Max/Avg)'), pad('Gap (Min/Max/Avg)')],
+        [pad('Farmer'), pad('Native Balance'), pad('Harvest (Min/Max/Avg)'), pad('Fee (Min/Max/Avg)'), pad('Gap (Min/Max/Avg)'), pad('Diff (Min/Max/Avg)')],
     ] : [
         [pad('Farmer'), pad('Balance'), pad('Status'), pad('Block/Stake (Last)'), pad('Block/Harvest (Last)'), pad('Gap/Zeros'), pad('Total Harvest'), pad('Total Fee')],
     ];
@@ -183,7 +183,8 @@ function renderFarmersTable(farmers) {
             pad(String(farmer.nativeBalance)),
             pad(String(farmer.harvestStats)),
             pad(String(farmer.feeStats)),
-            pad(String(farmer.gapStats))
+            pad(String(farmer.gapStats)),
+            pad(String(farmer.diffStats))
         ]);
     });
     farmersTable.setData(data);
@@ -247,13 +248,13 @@ function renderGraph() {
 
     const factor = Math.pow(1000, hashrateUnits.indexOf(modeUnit));
     const series = [{
-        title: 'Hashrate',
-        x: hashrates.length ? hashrates.map(s => new Date(s.time).toLocaleTimeString()) : [],
-        y: hashrates.length ? hashrates.map(s => s.hashRate / factor) : []
-    }];
+            title: 'Hashrate',
+            x: hashrates.length ? hashrates.map(s => new Date(s.time).toLocaleTimeString()) : [],
+            y: hashrates.length ? hashrates.map(s => s.hashRate / factor) : []
+        }];
     screen.remove(graphBox);
     screen.append(graphBox);
-    graphBox.setLabel(` Hashrate (${modeUnit}) `);
+    graphBox.setLabel(` Hashrate (${modeUnit}) `);   
     graphBox.setData(series);
 }
 
@@ -282,6 +283,7 @@ async function updateData(useCache) {
             const avgHarvest = value.stats.amount / value.stats.harvestCount;
             const avgFee = value.stats.fees / value.stats.feeCount;
             const avgGap = value.stats.gaps / value.stats.workCount;
+            const avgDiff = value.stats.diffs / value.stats.workCount;
             return ({
                 address: `${key.slice(0, 4)}..${key.slice(-6)}`,
                 balance: balances[key]?.KALE ? `${Number(balances[key]?.KALE).toFixed(3)} KALE` : '-',
@@ -293,8 +295,11 @@ async function updateData(useCache) {
                     ? `${Number(value.stats.minFee / 10000000).toFixed(4)}/${Number(value.stats.maxFee / 10000000).toFixed(4)}/${Number(avgFee / 10000000).toFixed(4)} XLM`
                     : '-',
                 gapStats: value.stats.minGap && value.stats.maxGap
-                ? `${Number(value.stats.minGap)}/${Number(value.stats.maxGap)}/${Number(avgGap).toFixed(1)}`
-                : '-',
+                    ? `${Number(value.stats.minGap)}/${Number(value.stats.maxGap)}/${Number(avgGap).toFixed(1)}`
+                    : '-',
+                diffStats: value.stats.minDiff && value.stats.maxDiff
+                    ? `${Number(value.stats.minDiff)}/${Number(value.stats.maxDiff)}/${Number(avgDiff).toFixed(1)}`
+                    : '-',
                 status: getStatus(value.status),
                 stake: `${value.stats?.stakeBlock || '-'}/${value.stats?.stake?.toFixed(3) || '-'} ${ value.stats?.stakeBlock ? 'KALE' : ''}`,
                 gapzeros: value.stats?.lastBlock ? `${value.stats?.workGap || '-'}/${value.stats?.lastDiff || '-'}` : '-/-',

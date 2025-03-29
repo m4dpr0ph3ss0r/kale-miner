@@ -6,16 +6,20 @@
             "secret": "SECRET...KEY",
             "stake": 0,
             "difficulty": 6,
-            "minWorkTime": 0,
+            "minWorkTime": 240,
             "harvestOnly": false
         }
     ],
     "harvester": {
         "account" : "SECRET...KEY",
         "delay": 60,
-        "range": "-1",
+        "range": "-5",
         "harvestOnly": false,
-        "retryCount": 3
+        "retryCount": 3,
+        "tractor": {
+            "contract": "CBGSBKYMYO6OMGHQXXNOBRGVUDFUDVC2XLC3SXON5R2SNXILR7XCKKY3",
+            "frequency": 900
+        }
     },
     "miner": {
         "executable": "../miner",

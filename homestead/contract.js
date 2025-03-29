@@ -19,7 +19,7 @@ const signers = config.farmers.reduce((acc, farmer) => {
         difficulty: farmer.difficulty,
         minWorkTime: farmer.minWorkTime || 0,
         harvestOnly: farmer.harvestOnly || false,
-        stats: { fees: 0, amount: 0, gaps: 0, workCount: 0, harvestCount: 0, feeCount: 0 }
+        stats: { fees: 0, amount: 0, gaps: 0, workCount: 0, harvestCount: 0, feeCount: 0, diffs: 0 }
     };
     return acc;
 }, {});
@@ -170,7 +170,7 @@ async function invoke(method, data) {
     }
 
     let args, source, params;
-    const contract = new Contract(contractId);
+    const contract = new Contract(data.contract || contractId);
     switch (method) {
         case 'plant':
             args = contract.call('plant', new Address(data.farmer).toScVal(),
@@ -189,15 +189,26 @@ async function invoke(method, data) {
                 nativeToScVal(data.block, { type: 'u32' }));
             params = `for block ${data.block}`;
             break;
+        case 'tractor':
+            source = StrKey.isValidEd25519SecretSeed(config.harvester?.account) ? Keypair.fromSecret(config.harvester?.account) : null;
+            await setupAsset(data.farmer);
+            args = contract.call('harvest', new Address(data.farmer).toScVal(),
+                nativeToScVal(data.blocks, { type: 'u32' }));
+            params = `for blocks ${data.blocks}`;
+            break;
     }
 
     const isLaunchTube = LaunchTube.isValid();
-    const { minResourceFee } = (await rpc.simulateTransaction(
+    const { minResourceFee, error } = (await rpc.simulateTransaction(
                 new TransactionBuilder(await rpc.getAccount(source?.publicKey() || data.farmer),
                     { fee: fees.toString(), networkPassphrase: config.stellar?.networkPassphrase || Networks.PUBLIC })
         .addOperation(args)
         .setTimeout(300)
         .build()));
+
+    if (config.stellar?.debug) {
+        console.log(error);
+    }
 
     let transaction = new TransactionBuilder(await rpc.getAccount(source?.publicKey() || data.farmer),
         { fee: (isLaunchTube || !config.stellar?.fees) ? minResourceFee : fees, networkPassphrase: config.stellar?.networkPassphrase || Networks.PUBLIC })
