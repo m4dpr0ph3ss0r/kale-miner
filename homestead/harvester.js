@@ -20,8 +20,11 @@ function parseRange(input) {
 
 class Harvester {
     static queue = [];
-    static lastFlush = 0;
-    static lastLogTime = 0;
+    static tractor = {
+        lastFlush: 0,
+        lastLogTime: 0,
+        retries: {}
+    };
 
     static add(farmer, block, time, retry) {
         retry = retry || config.harvester?.retryCount;
@@ -51,20 +54,26 @@ class Harvester {
                     const rewards = raw.map(r => Number(r) / 1e7);
                     const total = rewards.reduce((a, b) => a + b, 0);
                     const nonZeroRewards = rewards.filter(r => r > 0);
-                    signers[farmer].stats.fees += fee;
-                    signers[farmer].stats.feeCount += 1;
-                    signers[farmer].stats.minFee = Math.min(signers[farmer].stats.minFee || Number.MAX_VALUE, fee);
-                    signers[farmer].stats.maxFee = Math.max(signers[farmer].stats.maxFee || 0, fee);
-                    signers[farmer].stats.amount += total;
-                    signers[farmer].stats.harvestCount += nonZeroRewards.length;
-                    signers[farmer].stats.minAmount = Math.min(signers[farmer].stats.minAmount || Number.MAX_VALUE, ...nonZeroRewards);
-                    signers[farmer].stats.maxAmount = Math.max(signers[farmer].stats.maxAmount || 0, ...nonZeroRewards);
-                    signers[farmer].stats.lastAmount = nonZeroRewards.at(-1);
-                    signers[farmer].stats.lastBlock = validBlocks.at(-1);
+                    this.updateStats(farmer, {
+                        fee, feeCount: 1, amount: total, harvestCount: nonZeroRewards.length,
+                        minHarvest: Math.min(...nonZeroRewards), maxHarvest: Math.max(...nonZeroRewards),
+                        lastAmount: nonZeroRewards.at(-1), lastBlock: validBlocks.at(-1)
+                    });
                     console.log(`Farmer ${farmer} harvested blocks [${validBlocks.join(', ')}] for ${total} KALE`);
+                    this.tractor.retries[farmer] = config.harvester?.retryCount || 0;
                 } catch (err) {
+                    const retry = this.tractor.retries[farmer] ?? (this.tractor.retries[farmer] = config.harvester?.retryCount ?? 0);
                     const error = getError(err);
-                    console.error(`Farmer ${farmer} could not harvest blocks [${validBlocks.join(', ')}]: ${error}.`);
+                    console.error(`Farmer ${farmer} could not harvest blocks [${validBlocks.join(', ')}]: ${error}. Retry count: ${retry}.`);
+                    if (retry > 0) {
+                        this.tractor.retries[farmer] = retry - 1;
+                        validBlocks.forEach((block) => {
+                            this.add(farmer, block, 0);
+                        });
+                        this.tractor.lastFlush = Date.now() - ((config.harvester?.tractor?.frequency || 0) * 1000 - retryInterval);
+                    } else {
+                        this.testFail = false;
+                    }
                 }
             }
         } else {
@@ -78,21 +87,16 @@ class Harvester {
                     }
                     const value = Number(scValToNative(getReturnValue(response.resultMetaXdr)) || 0);
                     const fee = Number(response.feeCharged || 0);
-                    signers[farmer].stats.fees += fee;
-                    signers[farmer].stats.feeCount += 1;
-                    signers[farmer].stats.minFee = Math.min(signers[farmer].stats.minFee || Number.MAX_VALUE, fee);
-                    signers[farmer].stats.maxFee = Math.max(signers[farmer].stats.maxFee || 0, fee);
-                    signers[farmer].stats.amount += value / 10000000;
-                    signers[farmer].stats.harvestCount += 1;
-                    signers[farmer].stats.minAmount = Math.min(signers[farmer].stats.minAmount || Number.MAX_VALUE, value / 10000000);
-                    signers[farmer].stats.maxAmount = Math.max(signers[farmer].stats.maxAmount || 0, value / 10000000);
-                    signers[farmer].stats.lastAmount = value / 10000000;
-                    signers[farmer].stats.lastBlock = block;
-                    console.log(`Farmer ${farmer} harvested block ${block} for ${value / 10000000} KALE`);
+                    const amount = value / 1e7;
+                    this.updateStats(farmer, {
+                        fee, feeCount: 1, amount, harvestCount: 1, minHarvest: amount, maxHarvest: amount,
+                        lastAmount: amount, lastBlock: block
+                    });
+                    console.log(`Farmer ${farmer} harvested block ${block} for ${amount} KALE`);
                 } catch (err) {
                     const error = getError(err);
                     console.error(`Farmer ${farmer} could not harvest block ${block}: ${error}. Retry count: ${retry || 0}.`);
-                    if (!isNaN(retry)) {
+                    if (!isNaN(retry) && retry > 0) {
                         data.retry -= 1;
                         setTimeout(() => {
                             this.add(farmer, block, Date.now() + retryInterval, data.retry);
@@ -103,19 +107,33 @@ class Harvester {
         }
     }
 
+    static updateStats(farmer, stats) {
+        const signer = signers[farmer];
+        signer.stats.fees += stats.fee;
+        signer.stats.feeCount += stats.feeCount;
+        signer.stats.minFee = Math.min(signer.stats.minFee || Number.MAX_VALUE, stats.fee);
+        signer.stats.maxFee = Math.max(signer.stats.maxFee || 0, stats.fee);
+        signer.stats.amount += stats.amount;
+        signer.stats.harvestCount += stats.harvestCount;
+        signer.stats.minAmount = Math.min(signer.stats.minAmount || Number.MAX_VALUE, stats.minHarvest);
+        signer.stats.maxAmount = Math.max(signer.stats.maxAmount || 0, stats.maxHarvest);
+        signer.stats.lastAmount = stats.lastAmount;
+        signer.stats.lastBlock = stats.lastBlock;
+    }
+
     static async flush(force) {
         const tractor = config.harvester?.tractor;
         if (tractor?.contract) {
             const now = Date.now();
             const freq = (tractor.frequency || 0) * 1000;
-            if (!force && now - this.lastFlush < freq) {
-                if (now - this.lastLogTime >= 60000) {
-                    console.log(`Tractor next harvest in ${new Date(freq - (now - this.lastFlush)).toISOString().substr(14, 5)} mins.`);
-                    this.lastLogTime = now;
+            if (!force && now - this.tractor.lastFlush < freq) {
+                if (now - this.tractor.lastLogTime >= 60000) {
+                    console.log(`Tractor next harvest in ${new Date(freq - (now - this.tractor.lastFlush)).toISOString().substr(14, 5)} mins.`);
+                    this.tractor.lastLogTime = now;
                 }
                 return;
             }
-            this.lastFlush = now;
+            this.tractor.lastFlush = now;
             const batch = this.queue.reduce((b, { farmer, block }) => {
                 (b[farmer] ||= []).push(block);
                 return b;
