@@ -81,7 +81,7 @@ async function work(mining, key, blockData, onStart) {
         try {
             const workDiff = signers[key].work?.difficulty ? signers[key].work.difficulty + 1 : 0;
             const workNonce = signers[key].work?.nonce ? signers[key].work.nonce + 1 : 0;
-            const diff = workDiff || (continuous ? 6 : (await strategy.difficulty(key, deepCopy(blockData))) || signers[key].difficulty || difficulty || 6);
+            const diff = workDiff || (await strategy.difficulty(key, deepCopy(blockData))) || signers[key].difficulty || difficulty || 6;
             const { work } = await mine(executable, blockData.block, blockData.hash, workNonce || nonce,
                 diff, key, maxThreads, batchSize, device, gpu, verbose, onStart);
             signers[key].work = { ...work, difficulty: diff };
