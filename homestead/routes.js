@@ -4,7 +4,7 @@
  */
 
 const express = require('express');
-const { invoke, blockData, balances, signers, session } = require('./contract');
+const { invoke, hoard, blockData, balances, signers, session } = require('./contract');
 const router = express.Router();
 const path = require('path');
 
@@ -71,6 +71,14 @@ router.get('/shader', (req, res) => {
 
 router.get('/balances', async (req, res) => {
     res.json(balances);
+});
+
+router.post('/hoard', async (req, res) => {
+    try {
+        res.json({ result: await hoard() }); 
+    } catch (error) {
+        res.status(500).send(error.message);
+    }
 });
 
 module.exports = router;

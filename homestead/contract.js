@@ -3,7 +3,7 @@
  * Author: Fred Kyung-jin Rezeau <fred@litemint.com>
  */
 
-const { SorobanRpc, Horizon, xdr, Address, Operation, Asset, Contract, Networks, TransactionBuilder, StrKey, Keypair, nativeToScVal, scValToNative } = require('@stellar/stellar-sdk');
+const { SorobanRpc, Horizon, xdr, Address, Operation, Asset, Contract, Networks, TransactionBuilder, StrKey, Memo, Keypair, nativeToScVal, scValToNative } = require('@stellar/stellar-sdk');
 const config = require(process.env.CONFIG || './config.json');
 const rpc = new SorobanRpc.Server(process.env.RPC_URL || config.stellar?.rpc, { allowHttp: true });
 const horizon = new Horizon.Server(config.stellar?.horizon || 'https://horizon.stellar.org', { allowHttp: true });
@@ -162,6 +162,37 @@ async function getResponse(response, launchTube) {
     return response;
 }
 
+async function hoard() {
+    const { account: destination, percent, memo } = config.hoard || {};
+    const { assetCode: code, assetIssuer: issuer, networkPassphrase, debug } = config.stellar || {};
+    if (+percent > 0 && +percent <= 100
+        && code?.length && StrKey.isValidEd25519PublicKey(destination) && StrKey.isValidEd25519PublicKey(issuer)) {
+        let builder;
+        for (const key in signers) {
+            const account = await horizon.loadAccount(key);
+            builder ??= new TransactionBuilder(account, { fee: fees.toString(), networkPassphrase: networkPassphrase || Networks.PUBLIC });
+            builder.addOperation(Operation.payment({ destination, asset: new Asset(code, issuer),
+                amount: Math.floor(Number(account.balances.find(balance => balance.asset_code === code && balance.asset_issuer === issuer)?.balance || 0) * 0.01 * percent).toString(),
+                source: key }));
+        }
+
+        if (memo) {
+            builder.addMemo(Memo.text(memo))
+        }
+
+        const transaction = builder.setTimeout(300).build();
+        Object.values(signers).forEach(s => transaction.sign(Keypair.fromSecret(s.secret)));
+
+        const response = await getResponse(await rpc.sendTransaction(transaction));
+        const hash = transaction.hash().toString('hex');
+        if (debug) console.log(response);
+        if (response.status !== 'SUCCESS') {
+            throw new Error(`tx Failed: ${hash}`);
+        }
+        return { hash };
+    }
+}
+
 async function invoke(method, data) {
     const farmer = signers[data.farmer] || {};
     if (!StrKey.isValidEd25519SecretSeed(farmer.secret)) {
@@ -284,4 +315,4 @@ class LaunchTube {
     }
 }
 
-module.exports = { getInstanceData, getTemporaryData, getPail, getError, getReturnValue, invoke, LaunchTube, rpc, horizon, contractId, contractErrors, signers, blockData, balances, session };
+module.exports = { getInstanceData, getTemporaryData, getPail, getError, getReturnValue, invoke, hoard, LaunchTube, rpc, horizon, contractId, contractErrors, signers, blockData, balances, session };

@@ -203,6 +203,11 @@ Open `homestead/config.json` to configure your server settings.
             "frequency": 900
         }
     },
+    "hoard": {
+        "account": "G...KEY", // Public key for the hoarding account.
+        "percent": 50, // Percentage of the KALE balance to send from each farmer account.
+        "memo": "" // Optional. Transaction memo.
+    },
     // Tune these settings according to your system’s performance.
     "miner": {
         "executable": "../miner",
