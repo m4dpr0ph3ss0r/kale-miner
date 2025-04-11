@@ -248,7 +248,8 @@ Open `homestead/config.json` to configure your server settings.
         // Launchtube credits will be used to submit contract invocation transactions.
         "launchtube": {
             "url": "https://launchtube.xyz",
-            "token": "eyJ0eX...uQQa5WlP08"
+            "token": "eyJ0eX...uQQa5WlP08", // Your launchtube token, visit discord or https://kalefarm.xyz/launchtube/
+            "harvestReserve": 1000000 // Minimum amount reserved to ensure safe harvest for your last farmin cycle.
         }
     }
 }
@@ -270,7 +271,6 @@ Follow these steps to get it up and running:
 
 - Make sure the `PORT` matches your homestead server configuration.
 - Enable `miner.verbose` (set to `true`) in `config.json` to view the hash rate estimate.
-- Enable `stellar.launchtube.checkCredits` (set to `true`) in `config.json` to display the Launchtube credits.
 
 ```bash
 cd cropmonitor

@@ -258,7 +258,7 @@ async function invoke(method, data) {
 
     if (isLaunchTube) {
         return await getResponse(await LaunchTube.send(transaction.toEnvelope().toXDR('base64'),
-            config.stellar?.launchtube?.fees || transaction.fee), true);
+            config.stellar?.launchtube?.fees || transaction.fee, method), true);
     } else {
         return await getResponse(await rpc.sendTransaction(transaction));
     }
@@ -272,29 +272,31 @@ class LaunchTube {
             && config.stellar.launchtube.token.length > 30;
     }
 
-    static async send(xdr, fee) {
+    static async checkCredits(fee, headers, method) {
+        const res = await fetch(config.stellar.launchtube.url + '/info', { method: 'GET', headers });
+        if (!res.ok) {
+            throw new Error('Launchtube: Could not retrieve token info');
+        }
+        const credits = Number((await res.json())?.credits || 0);
+        session.launchTube = true;
+        session.credits = credits / 10000000;
+        console.log(`Launchtube: ${session.credits} XLM credits remaining`);
+        if (method === 'plant'
+            && credits < Math.max(config.stellar?.launchtube?.harvestReserve ?? 1000000, Number(fee))) {
+            (config.harvester ??= {}).harvestOnly = true;
+            console.log('Homestead harvestOnly = TRUE');
+            throw new Error('Launchtube: No credits');
+        }
+    }
+
+    static async send(xdr, fee, method) {
         const headers = {
             'Authorization': `Bearer ${config.stellar.launchtube.token}`,
             'X-Client-Name': 'cpp-kale-miner',
             'X-Client-Version': '1.0.0'
         };
 
-        session.launchTube = true;
-        if (config.stellar.launchtube.checkCredits) {
-            const res = await fetch(config.stellar.launchtube.url + '/info', {
-                method: 'GET',
-                headers
-            });
-            if (!res.ok) {
-                throw new Error('Launchtube: Could not retrieve token info');
-            }
-            const credits = Number((await res.json())?.credits || 0);
-            if (credits < Number(fee)) {
-                throw new Error('Launchtube: No credits');
-            }
-            session.credits = credits / 10000000;
-            console.log(`Launchtube: ${session.credits} XLM credits remaining`);
-        }
+        await this.checkCredits(fee, headers, method);
 
         const data = new FormData();
         data.append('xdr', xdr);

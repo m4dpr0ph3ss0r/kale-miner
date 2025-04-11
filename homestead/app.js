@@ -285,10 +285,6 @@ async function runFarm(interval) {
 
         // Complete work.
         for (const key in signers) {
-            if (harvestOnly || signers[key].harvestOnly) {
-                continue;
-            }
-
             elapsedTime = computeElapsed();
             if (hasElapsed) {
                 break;

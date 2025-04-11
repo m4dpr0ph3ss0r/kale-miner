@@ -39,9 +39,9 @@
         "fees": 10000000,
         "debug": false,
         "launchtube": {
-            "checkCredits": false,
             "url": "https://launchtube.xyz",
-            "token": "eyJ0eX...uQQa5WlP08"
+            "token": "eyJ0eX...uQQa5WlP08",
+            "harvestReserve": 1000000
         }
     }
 }
