@@ -31,3 +31,4 @@ setup/
 *.prod.js
 */miner.js
 */*.html
+.VSCodeCounter
