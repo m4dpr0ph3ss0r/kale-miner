@@ -230,23 +230,16 @@ async function invoke(method, data) {
     }
 
     const isLaunchTube = LaunchTube.isValid();
-    const { minResourceFee, error } = (await rpc.simulateTransaction(
-                new TransactionBuilder(await rpc.getAccount(source?.publicKey() || data.farmer),
-                    { fee: fees.toString(), networkPassphrase: config.stellar?.networkPassphrase || Networks.PUBLIC })
-        .addOperation(args)
-        .setTimeout(300)
-        .build()));
+    let transaction = new TransactionBuilder(await rpc.getAccount(source?.publicKey() || data.farmer), { 
+        fee: isLaunchTube ? '0' : fees.toString(),
+        networkPassphrase: config.stellar?.networkPassphrase || Networks.PUBLIC
+    }).addOperation(args).setTimeout(isLaunchTube ? 30 : 300).build();
 
-    if (config.stellar?.debug) {
-        console.log(error);
+    const sim = await rpc.simulateTransaction(transaction);
+    if (config.stellar?.debug && sim.error) {
+        console.error(JSON.stringify(sim.error));
     }
-
-    let transaction = new TransactionBuilder(await rpc.getAccount(source?.publicKey() || data.farmer),
-        { fee: (isLaunchTube || !config.stellar?.fees) ? minResourceFee : fees, networkPassphrase: config.stellar?.networkPassphrase || Networks.PUBLIC })
-            .addOperation(args)
-            .setTimeout(300)
-            .build();
-    transaction = await rpc.prepareTransaction(transaction);
+    transaction = SorobanRpc.assembleTransaction(transaction, sim).build();
     transaction.sign(Keypair.fromSecret(source?.secret() || farmer.secret));
 
     if (config.stellar?.debug) {
