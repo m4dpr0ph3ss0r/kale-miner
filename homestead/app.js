@@ -209,7 +209,7 @@ async function runFarm(interval) {
         const hasElapsed = elapsedTime > 60 * 5 + 15;
         const changed = result.block !== blockData.block;
 
-        if ((changed && result.block > blockData.block) || hasElapsed) {
+        if (result.block > blockData.block || hasElapsed) {
             if (changed) {
                 console.log(`New block detected ${result.block}`);
                 blockData.block = result.block;
