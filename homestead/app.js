@@ -60,7 +60,6 @@ async function plant(key, blockData, next) {
         await new Promise(resolve => setTimeout(resolve, pollInterval));
     }
 }
-
 async function work(mining, key, blockData, onStart) {
     if (signers[key].status !== FarmerStatus.WORKING) {
         return;
@@ -209,7 +208,8 @@ async function runFarm(interval) {
         let elapsedTime = computeElapsed();
         const hasElapsed = elapsedTime > 60 * 5 + 15;
         const changed = result.block !== blockData.block;
-        if (changed || hasElapsed) {
+
+        if ((changed && result.block > blockData.block) || hasElapsed) {
             if (changed) {
                 console.log(`New block detected ${result.block}`);
                 blockData.block = result.block;
@@ -236,7 +236,6 @@ async function runFarm(interval) {
                 elapsedTime = computeElapsed();
             }
         }
-
         if (!harvested && config.harvester?.range) {
             harvested = true;
             const { range, count } = parseRange(config.harvester.range);
