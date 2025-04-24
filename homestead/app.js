@@ -29,9 +29,8 @@ const FarmerStatus = Object.freeze({
 const deepCopy = obj => JSON.parse(JSON.stringify(obj,
     (_key, value) => typeof value === 'bigint' ? value.toString() : value));
 
-async function plant(key, blockData, next) {
+async function plant(key, blockData, _next) {
     const data = deepCopy(blockData);
-    data.block = data.block + (next ? 1 : 0);
     try {
         if (signers[key].status !== FarmerStatus.PLANTING) {
             return;
@@ -56,7 +55,7 @@ async function plant(key, blockData, next) {
         }
     } catch(err) {
         const error = getError(err);
-        console.error(`Farmer ${key} could not plant ${data.block} (next: ${next}): ${error}`);
+        console.error(`Farmer ${key} could not plant ${data.block}: ${error}`);
         await new Promise(resolve => setTimeout(resolve, pollInterval));
     }
 }
